@@ -8,7 +8,14 @@ def now_ts() -> float:
 
 
 def format_seconds(total_seconds: int) -> str:
-    minutes, seconds = divmod(max(total_seconds, 0), 60)
+    total_seconds = max(int(total_seconds), 0)
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    parts: list[str] = []
+    if hours:
+        parts.append(f"{hours}ч")
     if minutes:
-        return f"{minutes}m {seconds}s"
-    return f"{seconds}s"
+        parts.append(f"{minutes}м")
+    if seconds or not parts:
+        parts.append(f"{seconds}с")
+    return " ".join(parts)

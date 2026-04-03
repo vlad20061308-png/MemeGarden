@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 
 from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed
 from app.ui.cards import farm_card, help_card, inventory_card, shop_card
-from app.ui.keyboards import farm_keyboard, plant_keyboard, shop_keyboard
+from app.ui.keyboards import farm_keyboard, inventory_keyboard, plant_keyboard, shop_keyboard
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -15,7 +15,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     game = get_game(context)
     game.user(update.effective_user.id)
     await update.message.reply_text(
-        "Добро пожаловать в MemeGarden! Используй /help для списка команд."
+        "Добро пожаловать в MemeGarden! Старт: 10🪙, покупай семена в /shop и сажай через /plant."
     )
 
 
@@ -40,7 +40,7 @@ async def plant_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     game = get_game(context)
     state = game.user(update.effective_user.id)
     await update.message.reply_text(
-        "Выбери семя для посадки:", reply_markup=plant_keyboard(state.seeds)
+        "Выбери купленное семя для посадки:", reply_markup=plant_keyboard(state.seeds)
     )
 
 
@@ -49,8 +49,11 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(ANTISPAM_MESSAGE)
         return
     game = get_game(context)
-    state = game.user(update.effective_user.id)
-    await update.message.reply_text(farm_card(state), reply_markup=farm_keyboard())
+    farm_rows = game.get_farm_view(update.effective_user.id)
+    await update.message.reply_text(
+        farm_card(farm_rows),
+        reply_markup=farm_keyboard([row["plant_id"] for row in farm_rows]),
+    )
 
 
 async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -58,11 +61,19 @@ async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(ANTISPAM_MESSAGE)
         return
     game = get_game(context)
-    count, coins = game.harvest(update.effective_user.id)
-    if count == 0:
+    result = game.harvest(update.effective_user.id)
+    if result["harvested"] == 0 and result["wilted"] == 0:
         await update.message.reply_text("Пока нечего собирать. Проверь /farm")
         return
-    await update.message.reply_text(f"Собрано растений: {count}. Получено {coins}🪙")
+
+    drops = ", ".join(result["drops"]) if result["drops"] else "—"
+    await update.message.reply_text(
+        f"Собрано: {result['harvested']}\n"
+        f"Засохло и удалено: {result['wilted']}\n"
+        f"Не собрано из-за лимита инвентаря: {result['blocked']}\n"
+        f"Дроп: {drops}\n"
+        f"Получено монет: {result['coins']}🪙"
+    )
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -71,7 +82,7 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    await update.message.reply_text(inventory_card(state))
+    await update.message.reply_text(inventory_card(state), reply_markup=inventory_keyboard(state))
 
 
 async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
