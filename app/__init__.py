@@ -1,0 +1,1 @@
+"""MemeGarden application package."""
