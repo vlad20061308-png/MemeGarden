@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed, is_dev_user
-from app.ui.cards import farm_card, inventory_card
+from app.ui.cards import farm_card, format_level_reward_lines, inventory_card
 from app.ui.keyboards import dev_keyboard, farm_keyboard, inventory_keyboard
 
 
@@ -17,6 +17,7 @@ def _format_dev_state(state: dict) -> str:
         f"Активный инструмент: {state['active_tool']}",
         f"Семян: {state['seeds_count']}",
         f"Растений: {state['plants_count']}",
+        f"Level/XP: {state['level']} / {state['xp']}",
     ]
     if not state["plants"]:
         lines.append("Растения: (пусто)")
@@ -100,10 +101,19 @@ async def farm_harvest_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     game = get_game(context)
     result = game.harvest(update.effective_user.id)
-    await query.edit_message_text(
-        f"🧺 Собрано: {result['harvested']} | Засохло: {result['wilted']} | Блок по лимиту: {result['blocked']}\n"
-        f"Монеты: +{result['coins']}🪙"
-    )
+    xp = result["xp"]
+    lines = [
+        f"🧺 Собрано: {result['harvested']} | Засохло: {result['wilted']} | Блок по лимиту: {result['blocked']}",
+        f"Монеты: +{result['coins']}🪙",
+        f"XP: +{xp['xp_added']} (всего: {xp['xp_total']})",
+    ]
+    if xp["leveled_up"]:
+        lines.append(f"🎉 Уровень: {xp['old_level']} → {xp['new_level']}")
+        rewards_block = format_level_reward_lines(xp["granted_rewards"])
+        if rewards_block:
+            lines.append(rewards_block)
+
+    await query.edit_message_text("\n".join(lines))
 
 
 async def farm_boost_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
