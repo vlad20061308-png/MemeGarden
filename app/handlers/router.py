@@ -33,6 +33,7 @@ from app.handlers.command_handlers import (
     harvest_handler,
     help_handler,
     inventory_handler,
+    level_handler,
     plant_handler,
     shop_handler,
     start_handler,
@@ -48,6 +49,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("harvest", harvest_handler))
     app.add_handler(CommandHandler("inventory", inventory_handler))
     app.add_handler(CommandHandler("balance", balance_handler))
+    app.add_handler(CommandHandler("level", level_handler))
     app.add_handler(CommandHandler("dev_ready", dev_ready_handler))
     app.add_handler(CommandHandler("dev_ready_one", dev_ready_one_handler))
     app.add_handler(CommandHandler("dev_wilt", dev_wilt_handler))

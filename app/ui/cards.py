@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.data.constants import (
     INVENTORY_CAPACITY_LEVELS,
     MAX_FARM_SLOTS,
+    MAX_LEVEL,
     SEED_TYPES,
     STATE_GROWING,
     STATE_READY,
@@ -13,10 +14,40 @@ from app.data.models import UserState
 from app.utils.time_utils import format_seconds
 
 
+def format_level_reward_lines(granted_rewards: list[dict]) -> str:
+    if not granted_rewards:
+        return ""
+
+    lines = ["🎁 Награды за уровень:"]
+    for reward in granted_rewards:
+        parts = [f"lvl {reward['level']}"]
+        if reward.get("coins", 0) > 0:
+            parts.append(f"+{reward['coins']}🪙")
+
+        seeds = reward.get("seeds", {})
+        if seeds:
+            seed_text = ", ".join(f"{SEED_TYPES.get(seed_id, {'title': seed_id})['title']} x{amount}" for seed_id, amount in seeds.items())
+            parts.append(seed_text)
+
+        tools = reward.get("tools", {})
+        if tools:
+            tool_text = ", ".join(
+                f"{TOOLS.get(tool_id, {'title': tool_id})['title']} x{amount}" for tool_id, amount in tools.items()
+            )
+            parts.append(tool_text)
+
+        if reward.get("inventory_capacity_bonus", 0) > 0:
+            parts.append(f"+{reward['inventory_capacity_bonus']} к лимиту инвентаря")
+
+        lines.append("- " + " | ".join(parts))
+
+    return "\n".join(lines)
+
+
 def help_card() -> str:
     return (
         "Команды:\n"
-        "/start, /help, /shop, /plant, /farm, /harvest, /inventory, /balance\n"
+        "/start, /help, /shop, /plant, /farm, /harvest, /inventory, /balance, /level\n"
         "Dev: /dev_ready, /dev_ready_one, /dev_wilt, /dev_balance_set, /dev_balance_add, /dev_balance_take, /dev_state"
     )
 
@@ -30,6 +61,25 @@ def shop_card() -> str:
     for data in TOOLS.values():
         lines.append(f"- {data['title']}: {data['price']}🪙 (−{data['reduction_pct']}%)")
     return "\n".join(lines)
+
+
+def level_card(state: UserState, level_progress: dict) -> str:
+    next_level = level_progress["next_level"]
+    if next_level is None:
+        progress_line = f"🏆 Достигнут максимальный уровень: {MAX_LEVEL}"
+    else:
+        progress_line = (
+            f"До уровня {next_level}: {level_progress['xp_to_next']} XP"
+            f" (порог: {level_progress['next_level_xp']} XP)"
+        )
+
+    return (
+        "📈 Профиль прогресса\n"
+        f"Уровень: {state.level}\n"
+        f"XP: {state.xp}\n"
+        f"{progress_line}\n"
+        f"Полученные награды уровней: {len(state.claimed_level_rewards)}"
+    )
 
 
 def _progress_bar(progress: float, width: int = 10) -> str:
@@ -83,7 +133,8 @@ def inventory_card(state: UserState) -> str:
         "🎒 Инвентарь\n"
         f"Предметы: {used_slots}/{state.inventory_capacity}"
         f" (следующие уровни: {', '.join(map(str, INVENTORY_CAPACITY_LEVELS))})\n"
-        f"Активный инструмент: {active_tool}\n\n"
+        f"Активный инструмент: {active_tool}\n"
+        f"Уровень: {state.level} | XP: {state.xp}\n\n"
         + "Семена:\n"
         + ("\n".join(seed_lines) if seed_lines else "(пусто)")
         + "\n\nДроп:\n"

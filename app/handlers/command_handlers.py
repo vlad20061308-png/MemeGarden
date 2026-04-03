@@ -4,7 +4,14 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed, is_dev_user
-from app.ui.cards import farm_card, help_card, inventory_card, shop_card
+from app.ui.cards import (
+    farm_card,
+    format_level_reward_lines,
+    help_card,
+    inventory_card,
+    level_card,
+    shop_card,
+)
 from app.ui.keyboards import (
     dev_keyboard,
     farm_keyboard,
@@ -23,6 +30,7 @@ def _format_dev_state(state: dict) -> str:
         f"Активный инструмент: {state['active_tool']}",
         f"Семян: {state['seeds_count']}",
         f"Растений: {state['plants_count']}",
+        f"Level/XP: {state['level']} / {state['xp']}",
     ]
     if not state["plants"]:
         lines.append("Растения: (пусто)")
@@ -94,13 +102,22 @@ async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     drops = ", ".join(result["drops"]) if result["drops"] else "—"
-    await update.message.reply_text(
-        f"Собрано: {result['harvested']}\n"
-        f"Засохло и удалено: {result['wilted']}\n"
-        f"Не собрано из-за лимита инвентаря: {result['blocked']}\n"
-        f"Дроп: {drops}\n"
-        f"Получено монет: {result['coins']}🪙"
-    )
+    xp = result["xp"]
+    lines = [
+        f"Собрано: {result['harvested']}",
+        f"Засохло и удалено: {result['wilted']}",
+        f"Не собрано из-за лимита инвентаря: {result['blocked']}",
+        f"Дроп: {drops}",
+        f"Получено монет: {result['coins']}🪙",
+        f"Получено XP: +{xp['xp_added']} (всего: {xp['xp_total']})",
+    ]
+    if xp["leveled_up"]:
+        lines.append(f"🎉 Уровень: {xp['old_level']} → {xp['new_level']}")
+        rewards_block = format_level_reward_lines(xp["granted_rewards"])
+        if rewards_block:
+            lines.append(rewards_block)
+
+    await update.message.reply_text("\n".join(lines))
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -110,6 +127,16 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     game = get_game(context)
     state = game.user(update.effective_user.id)
     await update.message.reply_text(inventory_card(state), reply_markup=inventory_keyboard(state))
+
+
+async def level_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_allowed(update, context):
+        await update.message.reply_text(ANTISPAM_MESSAGE)
+        return
+    game = get_game(context)
+    state = game.user(update.effective_user.id)
+    progress = game.get_level_progress(update.effective_user.id)
+    await update.message.reply_text(level_card(state, progress))
 
 
 async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

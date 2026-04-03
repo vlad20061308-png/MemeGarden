@@ -28,3 +28,6 @@ class UserState:
     active_tool: Optional[str] = None
     inventory_capacity: int = 6
     next_plant_id: int = 1
+    xp: int = 0
+    level: int = 0
+    claimed_level_rewards: List[int] = field(default_factory=list)

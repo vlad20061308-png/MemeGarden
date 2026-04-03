@@ -149,6 +149,68 @@ TOOLS = {
     "diamond": {"title": "💎 Алмазная", "price": 7500, "reduction_pct": 80},
 }
 
+
+
+LEVEL_XP_REQUIREMENTS = {level: level * 100 for level in range(1, 36)}
+MAX_LEVEL = max(LEVEL_XP_REQUIREMENTS)
+
+XP_REWARDS = {
+    "plant_seed": 8,
+    "harvest_base": 18,
+    "harvest_rarity_bonus": {
+        "Обычное": 0,
+        "Необычное": 4,
+        "Редкое": 8,
+        "Эпическое": 14,
+        "Легендарное": 20,
+        "Мифическое": 28,
+        "Секретное": 36,
+        "Уникальное": 45,
+    },
+    "rare_drop_bonus": 12,
+    "epic_drop_bonus": 24,
+    "rare_drop_threshold": 10.0,
+    "epic_drop_threshold": 5.0,
+}
+
+LEVEL_REWARDS = {
+    1: {"coins": 25, "seeds": {"starter_seed": 2}},
+    2: {"coins": 35},
+    3: {"coins": 45, "seeds": {"starter_seed": 1}},
+    4: {"coins": 60},
+    5: {"coins": 90, "seeds": {"common_seed": 1}},
+    6: {"coins": 120},
+    7: {"coins": 150, "seeds": {"common_seed": 1}},
+    8: {"coins": 180, "inventory_capacity_bonus": 2},
+    9: {"coins": 220},
+    10: {"coins": 260, "tools": {"plastic": 1}, "seeds": {"uncommon_seed": 1}},
+    11: {"coins": 320},
+    12: {"coins": 380, "seeds": {"uncommon_seed": 1}},
+    13: {"coins": 450},
+    14: {"coins": 530},
+    15: {"coins": 620, "seeds": {"rare_seed": 1}},
+    16: {"coins": 720, "inventory_capacity_bonus": 2},
+    17: {"coins": 840},
+    18: {"coins": 980, "seeds": {"rare_seed": 1}},
+    19: {"coins": 1140},
+    20: {"coins": 1320, "tools": {"steel": 1}},
+    21: {"coins": 1520},
+    22: {"coins": 1740, "seeds": {"epic_seed": 1}},
+    23: {"coins": 1980},
+    24: {"coins": 2250, "inventory_capacity_bonus": 3},
+    25: {"coins": 2550, "seeds": {"epic_seed": 1}},
+    26: {"coins": 2880},
+    27: {"coins": 3240, "seeds": {"mythic_seed": 1}},
+    28: {"coins": 3630},
+    29: {"coins": 4050},
+    30: {"coins": 4510, "tools": {"gold": 1}, "seeds": {"mythic_seed": 1}},
+    31: {"coins": 5010},
+    32: {"coins": 5550, "inventory_capacity_bonus": 3},
+    33: {"coins": 6130, "seeds": {"divine_seed": 1}},
+    34: {"coins": 6760},
+    35: {"coins": 7440, "tools": {"diamond": 1}, "seeds": {"divine_seed": 1}},
+}
+
 COMMANDS = [
     ("start", "Запуск игры"),
     ("help", "Список команд"),
@@ -158,4 +220,5 @@ COMMANDS = [
     ("harvest", "Собрать готовый урожай"),
     ("inventory", "Инвентарь и инструмент"),
     ("balance", "Баланс монет"),
+    ("level", "Уровень и XP"),
 ]
