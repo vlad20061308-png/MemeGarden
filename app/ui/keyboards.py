@@ -6,8 +6,41 @@ from app.data.constants import SEED_TYPES, TOOLS
 from app.data.models import UserState
 
 
-def shop_keyboard() -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton("🌱 Семена", callback_data="shop_section:seeds")]]
+def main_menu_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton("🌱 Ферма", callback_data="menu_open:farm"),
+            InlineKeyboardButton("🛒 Магазин", callback_data="menu_open:shop"),
+        ],
+        [
+            InlineKeyboardButton("🎒 Инвентарь", callback_data="menu_open:inventory"),
+            InlineKeyboardButton("🛠 Инструменты", callback_data="menu_open:tools"),
+        ],
+        [
+            InlineKeyboardButton("🌰 Посадить", callback_data="menu_open:plant"),
+            InlineKeyboardButton("🧺 Собрать", callback_data="menu_open:harvest"),
+        ],
+        [
+            InlineKeyboardButton("👤 Профиль", callback_data="menu_open:profile"),
+            InlineKeyboardButton("🔄 Обновить", callback_data="menu_open:refresh"),
+        ],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def shop_menu_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton("🌱 Семена", callback_data="shop_section:seeds"),
+            InlineKeyboardButton("🛠 Инструменты", callback_data="shop_section:tools"),
+        ],
+        [InlineKeyboardButton("⬅️ В меню", callback_data="menu_back")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def shop_seeds_keyboard() -> InlineKeyboardMarkup:
+    rows = []
     for seed_id, data in SEED_TYPES.items():
         rows.append(
             [
@@ -17,8 +50,13 @@ def shop_keyboard() -> InlineKeyboardMarkup:
                 )
             ]
         )
+    rows.append([InlineKeyboardButton("⬅️ Разделы магазина", callback_data="menu_open:shop")])
+    rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_back")])
+    return InlineKeyboardMarkup(rows)
 
-    rows.append([InlineKeyboardButton("🛠 Инструменты", callback_data="shop_section:tools")])
+
+def shop_tools_keyboard() -> InlineKeyboardMarkup:
+    rows = []
     for tool_id, data in TOOLS.items():
         rows.append(
             [
@@ -28,6 +66,8 @@ def shop_keyboard() -> InlineKeyboardMarkup:
                 )
             ]
         )
+    rows.append([InlineKeyboardButton("⬅️ Разделы магазина", callback_data="menu_open:shop")])
+    rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -57,8 +97,13 @@ def farm_keyboard(plant_ids: list[int]) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🧺 Собрать", callback_data="farm_harvest"),
             ]
         )
-    rows.append([InlineKeyboardButton("🔄 Обновить ферму", callback_data="farm_refresh")])
-    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")])
+    rows.append(
+        [
+            InlineKeyboardButton("🔄 Обновить ферму", callback_data="farm_refresh"),
+            InlineKeyboardButton("🌰 Посадить", callback_data="menu_open:plant"),
+        ]
+    )
+    rows.append([InlineKeyboardButton("⬅️ Главное меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -88,7 +133,12 @@ def inventory_keyboard(state: UserState) -> InlineKeyboardMarkup:
 
     if not rows:
         rows.append([InlineKeyboardButton("Пока нечего нажимать", callback_data="noop")])
-    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")])
+    rows.append(
+        [
+            InlineKeyboardButton("🛠 Инструменты", callback_data="menu_open:tools"),
+            InlineKeyboardButton("⬅️ Главное меню", callback_data="menu_back"),
+        ]
+    )
     return InlineKeyboardMarkup(rows)
 
 
