@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.data.constants import MAX_FARM_SLOTS, SHOP_ITEMS
 from app.data.models import PlantRecord, UserState
-from app.data.storage import Storage
+from app.utils.storage import Storage
 from app.utils.time_utils import now_ts
 
 

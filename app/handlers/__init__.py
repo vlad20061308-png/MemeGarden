@@ -1,4 +1,9 @@
-from app.handlers.callback_handlers import noop_callback, plant_seed_callback, shop_buy_callback
+from app.handlers.callback_handlers import (
+    farm_refresh_callback,
+    noop_callback,
+    plant_seed_callback,
+    shop_buy_callback,
+)
 from app.handlers.command_handlers import (
     balance_handler,
     farm_handler,
@@ -9,6 +14,7 @@ from app.handlers.command_handlers import (
     shop_handler,
     start_handler,
 )
+from app.handlers.router import register_handlers
 
 __all__ = [
     "start_handler",
@@ -21,5 +27,7 @@ __all__ = [
     "balance_handler",
     "shop_buy_callback",
     "plant_seed_callback",
+    "farm_refresh_callback",
     "noop_callback",
+    "register_handlers",
 ]

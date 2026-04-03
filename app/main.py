@@ -3,31 +3,14 @@ from __future__ import annotations
 import logging
 
 from telegram import BotCommand, Update
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-)
+from telegram.ext import Application, ContextTypes
 
 from app.config import load_config
 from app.data.constants import COMMANDS
-from app.data.storage import Storage
-from app.handlers import (
-    balance_handler,
-    farm_handler,
-    harvest_handler,
-    help_handler,
-    inventory_handler,
-    noop_callback,
-    plant_handler,
-    plant_seed_callback,
-    shop_buy_callback,
-    shop_handler,
-    start_handler,
-)
+from app.handlers import register_handlers
 from app.services.anti_spam import AntiSpamService
 from app.services.game_service import GameService
+from app.utils.storage import Storage
 
 
 logging.basicConfig(
@@ -56,18 +39,7 @@ def build_app() -> Application:
     app.bot_data["game"] = game
     app.bot_data["anti_spam"] = anti_spam
 
-    app.add_handler(CommandHandler("start", start_handler))
-    app.add_handler(CommandHandler("help", help_handler))
-    app.add_handler(CommandHandler("shop", shop_handler))
-    app.add_handler(CommandHandler("plant", plant_handler))
-    app.add_handler(CommandHandler("farm", farm_handler))
-    app.add_handler(CommandHandler("harvest", harvest_handler))
-    app.add_handler(CommandHandler("inventory", inventory_handler))
-    app.add_handler(CommandHandler("balance", balance_handler))
-
-    app.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
-    app.add_handler(CallbackQueryHandler(plant_seed_callback, pattern=r"^plant_seed:"))
-    app.add_handler(CallbackQueryHandler(noop_callback, pattern=r"^noop$"))
+    register_handlers(app)
     app.add_error_handler(error_handler)
     return app
 
