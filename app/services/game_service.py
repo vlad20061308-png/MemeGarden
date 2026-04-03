@@ -260,3 +260,83 @@ class GameService:
             user.harvest.pop(item_id, None)
         self.storage.save()
         return True, "1 предмет удалён из инвентаря."
+
+    def force_ready_all(self, user_id: int) -> tuple[bool, str]:
+        user = self.user(user_id)
+        current = now_ts()
+        changed = 0
+        for plant in user.farm:
+            if self._plant_state(plant) == STATE_GROWING:
+                plant.due_at = current
+                plant.wilt_at = current + plant.ready_window_seconds
+                changed += 1
+        self.storage.save()
+        return True, f"Готово к сбору: {changed} растений."
+
+    def force_ready_one(self, user_id: int, plant_id: int) -> tuple[bool, str]:
+        user = self.user(user_id)
+        plant = next((p for p in user.farm if p.plant_id == plant_id), None)
+        if not plant:
+            return False, f"Растение #{plant_id} не найдено."
+        current = now_ts()
+        plant.due_at = current
+        plant.wilt_at = current + plant.ready_window_seconds
+        self.storage.save()
+        return True, f"Растение #{plant_id} переведено в ready."
+
+    def force_wilt_all(self, user_id: int) -> tuple[bool, str]:
+        user = self.user(user_id)
+        current = now_ts()
+        changed = 0
+        for plant in user.farm:
+            if self._plant_state(plant) != STATE_WILTED:
+                plant.due_at = current - 1
+                plant.wilt_at = current - 1
+                changed += 1
+        self.storage.save()
+        return True, f"Засушено растений: {changed}."
+
+    def set_balance(self, user_id: int, amount: int) -> tuple[bool, str]:
+        if amount < 0:
+            return False, "Баланс не может быть отрицательным."
+        user = self.user(user_id)
+        user.coins = amount
+        self.storage.save()
+        return True, f"Баланс установлен: {user.coins}🪙"
+
+    def add_balance(self, user_id: int, amount: int) -> tuple[bool, str]:
+        if amount < 0:
+            return False, "Сумма должна быть неотрицательной."
+        user = self.user(user_id)
+        user.coins += amount
+        self.storage.save()
+        return True, f"Добавлено {amount}🪙. Баланс: {user.coins}🪙"
+
+    def take_balance(self, user_id: int, amount: int) -> tuple[bool, str]:
+        if amount < 0:
+            return False, "Сумма должна быть неотрицательной."
+        user = self.user(user_id)
+        user.coins = max(user.coins - amount, 0)
+        self.storage.save()
+        return True, f"Списано {amount}🪙 (не ниже 0). Баланс: {user.coins}🪙"
+
+    def get_dev_state(self, user_id: int, dev_mode: bool) -> dict:
+        user = self.user(user_id)
+        plants = [
+            {
+                "plant_id": plant.plant_id,
+                "state": self._plant_state(plant),
+                "due_at": int(plant.due_at),
+                "wilt_at": int(plant.wilt_at),
+            }
+            for plant in user.farm
+        ]
+        return {
+            "user_id": user_id,
+            "dev_mode": dev_mode,
+            "balance": user.coins,
+            "active_tool": user.active_tool or "нет",
+            "seeds_count": sum(user.seeds.values()),
+            "plants_count": len(user.farm),
+            "plants": plants,
+        }

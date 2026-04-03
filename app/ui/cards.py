@@ -16,7 +16,8 @@ from app.utils.time_utils import format_seconds
 def help_card() -> str:
     return (
         "Команды:\n"
-        "/start, /help, /shop, /plant, /farm, /harvest, /inventory, /balance"
+        "/start, /help, /shop, /plant, /farm, /harvest, /inventory, /balance\n"
+        "Dev: /dev_ready, /dev_ready_one, /dev_wilt, /dev_balance_set, /dev_balance_add, /dev_balance_take, /dev_state"
     )
 
 

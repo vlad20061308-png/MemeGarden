@@ -38,6 +38,7 @@ def build_app() -> Application:
 
     app.bot_data["game"] = game
     app.bot_data["anti_spam"] = anti_spam
+    app.bot_data["config"] = cfg
 
     register_handlers(app)
     app.add_error_handler(error_handler)

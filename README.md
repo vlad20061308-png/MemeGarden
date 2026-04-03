@@ -5,6 +5,7 @@ Telegram-игра про ферму: покупка семян, посадка, 
 ## Что уже есть в игре
 
 - Команды: `/start`, `/help`, `/shop`, `/plant`, `/farm`, `/harvest`, `/inventory`, `/balance`
+- Dev-команды (только при `DEV_MODE=true` и для `DEV_USER_IDS`): `/dev_ready`, `/dev_ready_one`, `/dev_wilt`, `/dev_balance_set`, `/dev_balance_add`, `/dev_balance_take`, `/dev_state`
 - Антиспам
 - Магазин семян и покупка через inline-кнопки
 - Посадка семян
@@ -71,6 +72,8 @@ app/
    BOT_TOKEN=your_real_bot_token
    DATA_FILE=app/data/game_state.json
    ANTI_SPAM_SECONDS=1.0
+   DEV_MODE=false
+   DEV_USER_IDS=123456789
    ```
 
 > Важно: `.env.example` — это только шаблон, без реального токена.
