@@ -3,9 +3,32 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed, is_dev_user
-from app.ui.cards import farm_card, format_level_reward_lines, inventory_card
-from app.ui.keyboards import dev_keyboard, farm_keyboard, inventory_keyboard
+from app.handlers.deps import (
+    ANTISPAM_MESSAGE_SOFT,
+    get_game,
+    is_allowed,
+    is_dev_user,
+    should_warn_antispam,
+)
+from app.ui.cards import (
+    farm_card,
+    format_level_reward_lines,
+    inventory_card,
+    level_card,
+    menu_hint_card,
+    shop_card,
+    tools_card,
+)
+from app.ui.keyboards import (
+    dev_keyboard,
+    farm_keyboard,
+    inventory_keyboard,
+    main_menu_keyboard,
+    plant_keyboard,
+    shop_menu_keyboard,
+    shop_seeds_keyboard,
+    shop_tools_keyboard,
+)
 
 
 def _format_dev_state(state: dict) -> str:
@@ -35,14 +58,15 @@ async def shop_buy_seed_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     seed_id = query.data.split(":", 1)[1]
 
-    if not is_allowed(update, context):
-        await query.edit_message_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
     ok, message = game.buy_seed(update.effective_user.id, seed_id)
     prefix = "✅" if ok else "❌"
-    await query.edit_message_text(f"{prefix} {message}")
+    await query.edit_message_text(f"{prefix} {message}", reply_markup=shop_seeds_keyboard())
 
 
 async def shop_buy_tool_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -50,14 +74,15 @@ async def shop_buy_tool_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     tool_id = query.data.split(":", 1)[1]
 
-    if not is_allowed(update, context):
-        await query.edit_message_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
     ok, message = game.buy_tool(update.effective_user.id, tool_id)
     prefix = "✅" if ok else "❌"
-    await query.edit_message_text(f"{prefix} {message}")
+    await query.edit_message_text(f"{prefix} {message}", reply_markup=shop_tools_keyboard())
 
 
 async def plant_seed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -65,22 +90,25 @@ async def plant_seed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     seed_id = query.data.split(":", 1)[1]
 
-    if not is_allowed(update, context):
-        await query.edit_message_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
     ok, message = game.plant_seed(update.effective_user.id, seed_id)
     prefix = "✅" if ok else "❌"
-    await query.edit_message_text(f"{prefix} {message}")
+    state = game.user(update.effective_user.id)
+    await query.edit_message_text(f"{prefix} {message}", reply_markup=plant_keyboard(state.seeds))
 
 
 async def farm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
 
-    if not is_allowed(update, context):
-        await query.answer(ANTISPAM_MESSAGE, show_alert=False)
+    if not is_allowed(update, context, action="callback_soft"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
@@ -95,8 +123,9 @@ async def farm_harvest_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
 
-    if not is_allowed(update, context):
-        await query.answer(ANTISPAM_MESSAGE, show_alert=False)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
@@ -113,7 +142,7 @@ async def farm_harvest_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if rewards_block:
             lines.append(rewards_block)
 
-    await query.edit_message_text("\n".join(lines))
+    await query.edit_message_text("\n".join(lines), reply_markup=main_menu_keyboard())
 
 
 async def farm_boost_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -121,8 +150,9 @@ async def farm_boost_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     plant_id = int(query.data.split(":", 1)[1])
 
-    if not is_allowed(update, context):
-        await query.answer(ANTISPAM_MESSAGE, show_alert=False)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
@@ -141,8 +171,9 @@ async def equip_tool_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     tool_id = query.data.split(":", 1)[1]
 
-    if not is_allowed(update, context):
-        await query.answer(ANTISPAM_MESSAGE, show_alert=False)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
@@ -158,8 +189,9 @@ async def drop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     item_id = query.data.split(":", 1)[1]
 
-    if not is_allowed(update, context):
-        await query.answer(ANTISPAM_MESSAGE, show_alert=False)
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
         return
 
     game = get_game(context)
@@ -173,17 +205,88 @@ async def drop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def menu_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("⬅️ Вернись в меню командами: /shop /plant /farm /inventory")
+    await query.edit_message_text(menu_hint_card(), reply_markup=main_menu_keyboard())
 
 
 async def shop_section_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer("Используй кнопки ниже для покупки.", show_alert=False)
+    await query.answer()
+    section = query.data.split(":", 1)[1]
+    if not is_allowed(update, context, action="callback_nav"):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
+        return
+    if section == "seeds":
+        await query.edit_message_text("🌱 Раздел семян", reply_markup=shop_seeds_keyboard())
+        return
+    if section == "tools":
+        await query.edit_message_text("🛠 Раздел инструментов", reply_markup=shop_tools_keyboard())
+        return
+    await query.answer("Раздел не найден", show_alert=False)
 
 
 async def noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
+
+async def menu_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    target = query.data.split(":", 1)[1]
+
+    action = "callback_nav"
+    if target in {"harvest", "plant"}:
+        action = "callback_heavy"
+    elif target in {"farm", "refresh", "inventory", "tools", "profile", "shop"}:
+        action = "callback_soft"
+
+    if not is_allowed(update, context, action=action):
+        if should_warn_antispam(update, context):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
+        return
+
+    game = get_game(context)
+    user_id = update.effective_user.id
+
+    if target == "shop":
+        await query.edit_message_text(shop_card(), reply_markup=shop_menu_keyboard())
+        return
+    if target == "farm" or target == "refresh":
+        farm_rows = game.get_farm_view(user_id)
+        await query.edit_message_text(
+            farm_card(farm_rows),
+            reply_markup=farm_keyboard([row["plant_id"] for row in farm_rows]),
+        )
+        return
+    if target == "inventory":
+        state = game.user(user_id)
+        await query.edit_message_text(inventory_card(state), reply_markup=inventory_keyboard(state))
+        return
+    if target == "tools":
+        state = game.user(user_id)
+        await query.edit_message_text(tools_card(state), reply_markup=inventory_keyboard(state))
+        return
+    if target == "plant":
+        state = game.user(user_id)
+        await query.edit_message_text("🌰 Выбери семя для посадки", reply_markup=plant_keyboard(state.seeds))
+        return
+    if target == "harvest":
+        result = game.harvest(user_id)
+        xp = result["xp"]
+        lines = [
+            f"🧺 Собрано: {result['harvested']} | Засохло: {result['wilted']} | Блок по лимиту: {result['blocked']}",
+            f"Монеты: +{result['coins']}🪙",
+            f"XP: +{xp['xp_added']} (всего: {xp['xp_total']})",
+        ]
+        await query.edit_message_text("\n".join(lines), reply_markup=main_menu_keyboard())
+        return
+    if target == "profile":
+        state = game.user(user_id)
+        progress = game.get_level_progress(user_id)
+        await query.edit_message_text(level_card(state, progress), reply_markup=main_menu_keyboard())
+        return
+    await query.answer("Раздел пока недоступен", show_alert=False)
 
 
 async def dev_ready_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

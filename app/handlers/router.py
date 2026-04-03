@@ -13,6 +13,7 @@ from app.handlers.callback_handlers import (
     farm_boost_callback,
     farm_harvest_callback,
     farm_refresh_callback,
+    menu_open_callback,
     menu_back_callback,
     noop_callback,
     plant_seed_callback,
@@ -34,9 +35,11 @@ from app.handlers.command_handlers import (
     help_handler,
     inventory_handler,
     level_handler,
+    menu_handler,
     plant_handler,
     shop_handler,
     start_handler,
+    tools_handler,
 )
 
 
@@ -50,6 +53,8 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("inventory", inventory_handler))
     app.add_handler(CommandHandler("balance", balance_handler))
     app.add_handler(CommandHandler("level", level_handler))
+    app.add_handler(CommandHandler("menu", menu_handler))
+    app.add_handler(CommandHandler("tools", tools_handler))
     app.add_handler(CommandHandler("dev_ready", dev_ready_handler))
     app.add_handler(CommandHandler("dev_ready_one", dev_ready_one_handler))
     app.add_handler(CommandHandler("dev_wilt", dev_wilt_handler))
@@ -61,6 +66,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(shop_buy_seed_callback, pattern=r"^shop_buy_seed:"))
     app.add_handler(CallbackQueryHandler(shop_buy_tool_callback, pattern=r"^shop_buy_tool:"))
     app.add_handler(CallbackQueryHandler(shop_section_callback, pattern=r"^shop_section:"))
+    app.add_handler(CallbackQueryHandler(menu_open_callback, pattern=r"^menu_open:"))
     app.add_handler(CallbackQueryHandler(plant_seed_callback, pattern=r"^plant_seed:"))
     app.add_handler(CallbackQueryHandler(farm_boost_callback, pattern=r"^farm_boost:"))
     app.add_handler(CallbackQueryHandler(farm_harvest_callback, pattern=r"^farm_harvest$"))

@@ -3,21 +3,31 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed, is_dev_user
+from app.handlers.deps import (
+    ANTISPAM_MESSAGE_SOFT,
+    get_game,
+    is_allowed,
+    is_dev_user,
+    should_warn_antispam,
+)
 from app.ui.cards import (
     farm_card,
     format_level_reward_lines,
     help_card,
     inventory_card,
     level_card,
+    menu_hint_card,
     shop_card,
+    start_card,
+    tools_card,
 )
 from app.ui.keyboards import (
     dev_keyboard,
     farm_keyboard,
     inventory_keyboard,
+    main_menu_keyboard,
     plant_keyboard,
-    shop_keyboard,
+    shop_menu_keyboard,
 )
 
 
@@ -44,33 +54,38 @@ def _format_dev_state(state: dict) -> str:
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
-    game.user(update.effective_user.id)
+    state = game.user(update.effective_user.id)
     await update.message.reply_text(
-        "Добро пожаловать в MemeGarden! Старт: 10🪙, покупай семена в /shop и сажай через /plant."
+        start_card(state),
+        reply_markup=main_menu_keyboard(),
     )
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
-    await update.message.reply_text(help_card())
+    await update.message.reply_text(help_card(), reply_markup=main_menu_keyboard())
 
 
 async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
-    await update.message.reply_text(shop_card(), reply_markup=shop_keyboard())
+    await update.message.reply_text(shop_card(), reply_markup=shop_menu_keyboard())
 
 
 async def plant_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
@@ -80,8 +95,9 @@ async def plant_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
     farm_rows = game.get_farm_view(update.effective_user.id)
@@ -92,8 +108,9 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
     result = game.harvest(update.effective_user.id)
@@ -117,12 +134,13 @@ async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if rewards_block:
             lines.append(rewards_block)
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text("\n".join(lines), reply_markup=main_menu_keyboard())
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
@@ -130,22 +148,42 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def level_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
     progress = game.get_level_progress(update.effective_user.id)
-    await update.message.reply_text(level_card(state, progress))
+    await update.message.reply_text(level_card(state, progress), reply_markup=main_menu_keyboard())
 
 
 async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context):
-        await update.message.reply_text(ANTISPAM_MESSAGE)
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    await update.message.reply_text(f"Баланс: {state.coins}🪙")
+    await update.message.reply_text(f"💰 Баланс: {state.coins}🪙", reply_markup=main_menu_keyboard())
+
+
+async def tools_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+        return
+    game = get_game(context)
+    state = game.user(update.effective_user.id)
+    await update.message.reply_text(tools_card(state), reply_markup=inventory_keyboard(state))
+
+
+async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_allowed(update, context, action="command"):
+        if should_warn_antispam(update, context):
+            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+        return
+    await update.message.reply_text(menu_hint_card(), reply_markup=main_menu_keyboard())
 
 
 async def dev_ready_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
