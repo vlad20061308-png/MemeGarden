@@ -7,7 +7,11 @@ from app.data.constants import SHOP_ITEMS
 
 def shop_keyboard() -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(f"Купить {data['title']} ({data['price']}🪙)", callback_data=f"shop_buy:{seed_id}")]
+        [
+            InlineKeyboardButton(
+                f"Купить {data['title']} ({data['price']}🪙)", callback_data=f"shop_buy:{seed_id}"
+            )
+        ]
         for seed_id, data in SHOP_ITEMS.items()
     ]
     return InlineKeyboardMarkup(rows)
@@ -28,3 +32,9 @@ def plant_keyboard(user_seeds: dict[str, int]) -> InlineKeyboardMarkup:
     if not rows:
         rows.append([InlineKeyboardButton("Нет доступных семян", callback_data="noop")])
     return InlineKeyboardMarkup(rows)
+
+
+def farm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔄 Обновить ферму", callback_data="farm_refresh")]]
+    )

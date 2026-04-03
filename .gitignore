@@ -1,3 +1,13 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# Environment
 .env
+.venv/
+venv/
+
+# Local game data
+app/data/game_state.json
+game_data.json
