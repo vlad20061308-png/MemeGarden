@@ -90,3 +90,14 @@ def inventory_keyboard(state: UserState) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton("Пока нечего нажимать", callback_data="noop")])
     rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(rows)
+
+
+def dev_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton("⚡ Сделать всё готовым", callback_data="dev_ready_all")],
+        [InlineKeyboardButton("🥀 Засушить всё", callback_data="dev_wilt_all")],
+        [InlineKeyboardButton("💰 +1000", callback_data="dev_add_1000")],
+        [InlineKeyboardButton("💰 Установить 100000", callback_data="dev_set_100000")],
+        [InlineKeyboardButton("🔄 Обновить dev state", callback_data="dev_state_refresh")],
+    ]
+    return InlineKeyboardMarkup(rows)

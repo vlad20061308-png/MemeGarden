@@ -3,9 +3,30 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed
+from app.handlers.deps import ANTISPAM_MESSAGE, get_game, is_allowed, is_dev_user
 from app.ui.cards import farm_card, inventory_card
-from app.ui.keyboards import farm_keyboard, inventory_keyboard
+from app.ui.keyboards import dev_keyboard, farm_keyboard, inventory_keyboard
+
+
+def _format_dev_state(state: dict) -> str:
+    lines = [
+        "🛠 Developer state",
+        f"user id: {state['user_id']}",
+        f"DEV_MODE: {'on' if state['dev_mode'] else 'off'}",
+        f"Баланс: {state['balance']}🪙",
+        f"Активный инструмент: {state['active_tool']}",
+        f"Семян: {state['seeds_count']}",
+        f"Растений: {state['plants_count']}",
+    ]
+    if not state["plants"]:
+        lines.append("Растения: (пусто)")
+    else:
+        lines.append("Растения:")
+        for plant in state["plants"]:
+            lines.append(
+                f"- #{plant['plant_id']} | {plant['state']} | due_at={plant['due_at']} | wilt_at={plant['wilt_at']}"
+            )
+    return "\n".join(lines)
 
 
 async def shop_buy_seed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -153,3 +174,67 @@ async def shop_section_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
+
+async def dev_ready_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not is_dev_user(update, context):
+        await query.answer("Недостаточно прав", show_alert=False)
+        return
+    game = get_game(context)
+    _, message = game.force_ready_all(update.effective_user.id)
+    cfg = context.application.bot_data["config"]
+    state = game.get_dev_state(update.effective_user.id, cfg.dev_mode)
+    await query.edit_message_text(f"✅ {message}\n\n{_format_dev_state(state)}", reply_markup=dev_keyboard())
+
+
+async def dev_wilt_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not is_dev_user(update, context):
+        await query.answer("Недостаточно прав", show_alert=False)
+        return
+    game = get_game(context)
+    _, message = game.force_wilt_all(update.effective_user.id)
+    cfg = context.application.bot_data["config"]
+    state = game.get_dev_state(update.effective_user.id, cfg.dev_mode)
+    await query.edit_message_text(f"✅ {message}\n\n{_format_dev_state(state)}", reply_markup=dev_keyboard())
+
+
+async def dev_add_1000_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not is_dev_user(update, context):
+        await query.answer("Недостаточно прав", show_alert=False)
+        return
+    game = get_game(context)
+    _, message = game.add_balance(update.effective_user.id, 1000)
+    cfg = context.application.bot_data["config"]
+    state = game.get_dev_state(update.effective_user.id, cfg.dev_mode)
+    await query.edit_message_text(f"✅ {message}\n\n{_format_dev_state(state)}", reply_markup=dev_keyboard())
+
+
+async def dev_set_100000_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not is_dev_user(update, context):
+        await query.answer("Недостаточно прав", show_alert=False)
+        return
+    game = get_game(context)
+    _, message = game.set_balance(update.effective_user.id, 100000)
+    cfg = context.application.bot_data["config"]
+    state = game.get_dev_state(update.effective_user.id, cfg.dev_mode)
+    await query.edit_message_text(f"✅ {message}\n\n{_format_dev_state(state)}", reply_markup=dev_keyboard())
+
+
+async def dev_state_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not is_dev_user(update, context):
+        await query.answer("Недостаточно прав", show_alert=False)
+        return
+    cfg = context.application.bot_data["config"]
+    game = get_game(context)
+    state = game.get_dev_state(update.effective_user.id, cfg.dev_mode)
+    await query.edit_message_text(_format_dev_state(state), reply_markup=dev_keyboard())
