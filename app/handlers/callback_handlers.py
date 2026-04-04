@@ -11,6 +11,8 @@ from app.handlers.deps import (
     should_warn_antispam,
 )
 from app.ui.cards import (
+    expedition_card,
+    expedition_result_card,
     farm_card,
     format_level_reward_lines,
     inventory_card,
@@ -21,6 +23,7 @@ from app.ui.cards import (
 )
 from app.ui.keyboards import (
     dev_keyboard,
+    expedition_keyboard,
     farm_keyboard,
     inventory_keyboard,
     main_menu_keyboard,
@@ -35,6 +38,7 @@ UNAVAILABLE_MESSAGES = {
     "harvest": "🌾 Пока нечего собирать. Дай растениям созреть.",
     "plant": "🪴 Посадка недоступна: проверь семена и свободные слоты.",
     "inventory": "🎒 Сейчас это действие недоступно.",
+    "expedition": "⚡ Энергии пока не хватает для экспедиции.",
 }
 
 
@@ -62,22 +66,34 @@ def _format_dev_state(state: dict) -> str:
 
 async def _render_farm(query, game, user_id: int) -> None:
     farm_state = game.get_farm_action_state(user_id)
+    expedition = game.get_expedition_state(user_id)
     await query.edit_message_text(
         farm_card(farm_state["farm_rows"], farm_state),
-        reply_markup=farm_keyboard(farm_state),
+        reply_markup=farm_keyboard(farm_state, can_expedition=expedition["can_expedition"]),
     )
 
 
 async def _render_inventory(query, game, user_id: int, card_builder=inventory_card) -> None:
     state = game.user(user_id)
     farm_state = game.get_farm_action_state(user_id)
+    expedition = game.get_expedition_state(user_id)
     await query.edit_message_text(
         card_builder(state),
         reply_markup=inventory_keyboard(
             state,
             has_seeds=farm_state["has_seeds"] and farm_state["free_slots"] > 0,
             has_drops=farm_state["has_inventory_items"],
+            can_expedition=expedition["can_expedition"],
         ),
+    )
+
+
+async def _render_expedition(query, game, user_id: int) -> None:
+    expedition = game.get_expedition_state(user_id)
+    hub = game.get_player_hub_state(user_id)
+    await query.edit_message_text(
+        expedition_card(expedition, hub),
+        reply_markup=expedition_keyboard(expedition["can_expedition"]),
     )
 
 
@@ -170,7 +186,8 @@ async def farm_harvest_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if rewards_block:
             lines.append(rewards_block)
 
-    await query.edit_message_text("\n".join(lines), reply_markup=main_menu_keyboard())
+    hub = game.get_player_hub_state(update.effective_user.id)
+    await query.edit_message_text("\n".join(lines), reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
 
 
 async def farm_boost_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -225,8 +242,8 @@ async def menu_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     game = get_game(context)
-    hub = game.get_hub_state(update.effective_user.id)
-    await query.edit_message_text(menu_hint_card(hub), reply_markup=main_menu_keyboard())
+    hub = game.get_player_hub_state(update.effective_user.id)
+    await query.edit_message_text(menu_hint_card(hub), reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
 
 
 async def shop_section_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -261,7 +278,7 @@ async def menu_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     target = query.data.split(":", 1)[1]
 
     action = "callback_nav"
-    if target in {"harvest", "plant"}:
+    if target in {"harvest", "plant", "expedition"}:
         action = "callback_heavy"
     elif target in {"farm", "refresh", "inventory", "tools", "profile", "shop"}:
         action = "callback_soft"
@@ -302,14 +319,46 @@ async def menu_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"Монеты: +{result['coins']}🪙",
             f"XP: +{xp['xp_added']} (всего: {xp['xp_total']})",
         ]
-        await query.edit_message_text("\n".join(lines), reply_markup=main_menu_keyboard())
+        hub = game.get_player_hub_state(user_id)
+        await query.edit_message_text("\n".join(lines), reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
         return
     if target == "profile":
-        state = game.user(user_id)
-        progress = game.get_level_progress(user_id)
-        await query.edit_message_text(level_card(state, progress), reply_markup=main_menu_keyboard())
+        profile = game.get_profile_state(user_id)
+        await query.edit_message_text(
+            level_card(profile["user"], profile["progress"], profile["expedition"]),
+            reply_markup=main_menu_keyboard(can_expedition=profile["expedition"]["can_expedition"]),
+        )
+        return
+    if target == "expedition":
+        await _render_expedition(query, game, user_id)
         return
     await query.answer("Раздел пока недоступен", show_alert=False)
+
+
+async def expedition_run_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    if not is_allowed(update, context, action="callback_heavy"):
+        if should_warn_antispam(update, context, action="callback_heavy"):
+            await query.answer(ANTISPAM_MESSAGE_SOFT, show_alert=False)
+        return
+
+    game = get_game(context)
+    result = game.run_expedition(update.effective_user.id)
+    if not result["ok"]:
+        state = result["state"]
+        await query.answer(result["message"], show_alert=False)
+        await query.edit_message_text(
+            expedition_card(state, game.get_player_hub_state(update.effective_user.id)),
+            reply_markup=expedition_keyboard(state["can_expedition"]),
+        )
+        return
+
+    await query.edit_message_text(
+        expedition_result_card(result),
+        reply_markup=expedition_keyboard(result["state"]["can_expedition"]),
+    )
 
 
 async def dev_ready_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

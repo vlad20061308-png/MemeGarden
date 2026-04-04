@@ -9,15 +9,19 @@ from app.services.anti_spam import AntiSpamService
 from app.services.game_service import GameService
 
 
-ANTISPAM_MESSAGE_SOFT = "⏳ Подожди немного... действие ещё на кулдауне."
+ANTISPAM_MESSAGE_SOFT = "⏳ Подожди немного..."
 
 ACTION_COOLDOWNS = {
-    "command": 0.7,
-    "callback_nav": 0.15,
-    "callback_soft": 0.25,
-    "callback_heavy": 0.65,
+    "command": 1.0,
+    "callback_nav": 0.12,
+    "callback_soft": 0.22,
+    "callback_heavy": 0.55,
 }
-WARNING_COOLDOWN_SECONDS = 6.0
+WARNING_COOLDOWN_SECONDS = {
+    "command": 8.0,
+    "callback_soft": 12.0,
+    "callback_heavy": 7.0,
+}
 
 
 def get_game(context: ContextTypes.DEFAULT_TYPE) -> GameService:
@@ -48,17 +52,21 @@ def should_warn_antispam(update: Update, context: ContextTypes.DEFAULT_TYPE, act
         return False
 
     state = _rate_state(context)
-    blocks = state["blocked_count"].get(user.id, 0)
-    if action == "callback_soft" and blocks % 3 != 0:
+    blocks = state["blocked_count"].get((user.id, action), 0)
+
+    if action == "callback_soft" and blocks < 4:
         return False
-    if action in {"command", "callback_heavy"} and blocks % 2 != 0:
+    if action in {"command", "callback_heavy"} and blocks < 2:
         return False
 
     now = time.monotonic()
-    last_warn = state["last_warning"].get(user.id, 0.0)
-    if now - last_warn < WARNING_COOLDOWN_SECONDS:
+    warn_key = (user.id, action)
+    warning_cooldown = WARNING_COOLDOWN_SECONDS.get(action, 8.0)
+    last_warn = state["last_warning"].get(warn_key, 0.0)
+    if now - last_warn < warning_cooldown:
         return False
-    state["last_warning"][user.id] = now
+
+    state["last_warning"][warn_key] = now
     return True
 
 
@@ -80,9 +88,10 @@ def is_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str =
         is_limited = not get_antispam(context).is_allowed(user.id)
 
     if is_limited:
-        state["blocked_count"][user.id] = state["blocked_count"].get(user.id, 0) + 1
+        block_key = (user.id, action)
+        state["blocked_count"][block_key] = state["blocked_count"].get(block_key, 0) + 1
         return False
 
     state["last_action"][action_key] = now
-    state["blocked_count"][user.id] = 0
+    state["blocked_count"][(user.id, action)] = 0
     return True

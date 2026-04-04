@@ -10,6 +10,7 @@ from app.handlers.callback_handlers import (
     dev_wilt_all_callback,
     drop_item_callback,
     equip_tool_callback,
+    expedition_run_callback,
     farm_boost_callback,
     farm_harvest_callback,
     farm_refresh_callback,
@@ -31,6 +32,7 @@ from app.handlers.command_handlers import (
     dev_ready_one_handler,
     dev_state_handler,
     dev_wilt_handler,
+    expedition_handler,
     farm_handler,
     harvest_handler,
     help_handler,
@@ -53,6 +55,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("farm", farm_handler))
     app.add_handler(CommandHandler("harvest", harvest_handler))
     app.add_handler(CommandHandler("inventory", inventory_handler))
+    app.add_handler(CommandHandler("expedition", expedition_handler))
     app.add_handler(CommandHandler("balance", balance_handler))
     app.add_handler(CommandHandler("level", level_handler))
     app.add_handler(CommandHandler("menu", menu_handler))
@@ -77,6 +80,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(farm_refresh_callback, pattern=r"^farm_refresh$"))
     app.add_handler(CallbackQueryHandler(equip_tool_callback, pattern=r"^equip_tool:"))
     app.add_handler(CallbackQueryHandler(drop_item_callback, pattern=r"^drop_item:"))
+    app.add_handler(CallbackQueryHandler(expedition_run_callback, pattern=r"^expedition_run$"))
     app.add_handler(CallbackQueryHandler(menu_back_callback, pattern=r"^menu_back$"))
     app.add_handler(CallbackQueryHandler(noop_callback, pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(unavailable_callback, pattern=r"^unavailable:"))

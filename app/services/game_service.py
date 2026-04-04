@@ -4,7 +4,13 @@ import random
 
 from app.data.constants import (
     DEFAULT_INVENTORY_CAPACITY,
+    EXPEDITION_DEFAULT_ENERGY,
+    EXPEDITION_DEFAULT_MAX_ENERGY,
+    EXPEDITION_ENERGY_COST,
+    EXPEDITION_ENERGY_REGEN_SECONDS,
+    EXPEDITION_LOOT_TABLE,
     INVENTORY_CAPACITY_LEVELS,
+    ITEM_TITLES,
     LEVEL_REWARDS,
     LEVEL_XP_REQUIREMENTS,
     MAX_FARM_SLOTS,
@@ -26,6 +32,9 @@ class GameService:
     META_XP_KEY = "__meta_xp"
     META_LEVEL_KEY = "__meta_level"
     META_CLAIM_MASK_KEY = "__meta_level_claim_mask"
+    META_ENERGY_KEY = "__meta_energy"
+    META_MAX_ENERGY_KEY = "__meta_max_energy"
+    META_ENERGY_REGEN_TS_KEY = "__meta_energy_regen_at"
 
     def __init__(self, storage: Storage) -> None:
         self.storage = storage
@@ -70,12 +79,50 @@ class GameService:
         user.claimed_level_rewards = sorted({level for level in user.claimed_level_rewards if level > 0})
         return changed
 
+    def _load_energy_meta(self, user: UserState) -> bool:
+        changed = False
+
+        energy_meta = user.owned_tools.get(self.META_ENERGY_KEY)
+        if energy_meta is not None:
+            value = max(int(energy_meta), 0)
+            if user.energy != value:
+                user.energy = value
+                changed = True
+
+        max_energy_meta = user.owned_tools.get(self.META_MAX_ENERGY_KEY)
+        if max_energy_meta is not None:
+            max_value = max(int(max_energy_meta), 1)
+            if user.max_energy != max_value:
+                user.max_energy = max_value
+                changed = True
+
+        regen_meta = user.owned_tools.get(self.META_ENERGY_REGEN_TS_KEY)
+        if regen_meta is not None:
+            regen_value = max(float(regen_meta), 0.0)
+            if user.last_energy_regen_at != regen_value:
+                user.last_energy_regen_at = regen_value
+                changed = True
+
+        if user.max_energy <= 0:
+            user.max_energy = EXPEDITION_DEFAULT_MAX_ENERGY
+            changed = True
+        if user.energy < 0:
+            user.energy = 0
+            changed = True
+        if user.energy > user.max_energy:
+            user.energy = user.max_energy
+            changed = True
+        return changed
+
     def _store_progression_meta(self, user: UserState) -> None:
         user.owned_tools[self.META_XP_KEY] = max(user.xp, 0)
         user.owned_tools[self.META_LEVEL_KEY] = max(user.level, 0)
         user.owned_tools[self.META_CLAIM_MASK_KEY] = self._claimed_levels_to_mask(
             user.claimed_level_rewards
         )
+        user.owned_tools[self.META_ENERGY_KEY] = max(user.energy, 0)
+        user.owned_tools[self.META_MAX_ENERGY_KEY] = max(user.max_energy, 1)
+        user.owned_tools[self.META_ENERGY_REGEN_TS_KEY] = max(float(user.last_energy_regen_at), 0.0)
 
     def _save_user(self, user: UserState) -> None:
         self._store_progression_meta(user)
@@ -83,9 +130,41 @@ class GameService:
 
     def user(self, user_id: int) -> UserState:
         user = self.storage.get_or_create_user(user_id)
-        if self._load_progression_meta(user):
+        changed = self._load_progression_meta(user)
+        changed = self._load_energy_meta(user) or changed
+        changed = self.restore_energy_if_needed(user, save=False) or changed
+        if changed:
             self._save_user(user)
         return user
+
+    def restore_energy_if_needed(self, user: UserState, save: bool = False) -> bool:
+        if user.max_energy <= 0:
+            user.max_energy = EXPEDITION_DEFAULT_MAX_ENERGY
+        if user.energy >= user.max_energy:
+            return False
+
+        current = now_ts()
+        if user.last_energy_regen_at <= 0:
+            user.last_energy_regen_at = current
+            if save:
+                self._save_user(user)
+            return True
+
+        elapsed = max(current - user.last_energy_regen_at, 0)
+        regen_steps = int(elapsed // EXPEDITION_ENERGY_REGEN_SECONDS)
+        if regen_steps <= 0:
+            return False
+
+        old_energy = user.energy
+        user.energy = min(user.max_energy, user.energy + regen_steps)
+        user.last_energy_regen_at += regen_steps * EXPEDITION_ENERGY_REGEN_SECONDS
+        if user.energy >= user.max_energy:
+            user.last_energy_regen_at = current
+
+        changed = user.energy != old_energy
+        if changed and save:
+            self._save_user(user)
+        return changed
 
     def seed_catalog(self) -> dict:
         return SEED_TYPES
@@ -387,9 +466,80 @@ class GameService:
             "free_slots": max(MAX_FARM_SLOTS - len(user.farm), 0),
         }
 
+    def get_farm_screen_state(self, user_id: int) -> dict:
+        return self.get_farm_action_state(user_id)
+
+    def _energy_eta_seconds(self, user: UserState) -> int:
+        if user.energy >= user.max_energy:
+            return 0
+        anchor = user.last_energy_regen_at or now_ts()
+        eta = int(anchor + EXPEDITION_ENERGY_REGEN_SECONDS - now_ts())
+        return max(eta, 0)
+
+    def _roll_expedition_loot(self) -> dict:
+        roll = random.uniform(0, 100)
+        cumulative = 0.0
+        fallback = EXPEDITION_LOOT_TABLE[-1]
+        for loot in EXPEDITION_LOOT_TABLE:
+            cumulative += float(loot["chance"])
+            if roll <= cumulative:
+                return loot
+            fallback = loot
+        return fallback
+
+    def get_expedition_state(self, user_id: int) -> dict:
+        user = self.user(user_id)
+        return {
+            "energy": user.energy,
+            "max_energy": user.max_energy,
+            "energy_cost": EXPEDITION_ENERGY_COST,
+            "can_expedition": user.energy >= EXPEDITION_ENERGY_COST,
+            "time_to_next": self._energy_eta_seconds(user),
+        }
+
+    def run_expedition(self, user_id: int) -> dict:
+        user = self.user(user_id)
+        self.restore_energy_if_needed(user, save=False)
+        if user.energy < EXPEDITION_ENERGY_COST:
+            return {
+                "ok": False,
+                "message": "⚡ Энергия закончилась. Подожди восстановления или вернись позже.",
+                "state": self.get_expedition_state(user_id),
+            }
+
+        user.energy -= EXPEDITION_ENERGY_COST
+        if user.energy < user.max_energy and user.last_energy_regen_at <= 0:
+            user.last_energy_regen_at = now_ts()
+
+        reward_cfg = self._roll_expedition_loot()
+        reward_type = reward_cfg["type"]
+        reward_amount = int(reward_cfg.get("amount", 1))
+        reward_title = reward_cfg["title"]
+        result = {"type": reward_type, "title": reward_title, "amount": reward_amount}
+
+        if reward_type == "coins":
+            coins = random.randint(int(reward_cfg["min"]), int(reward_cfg["max"]))
+            user.coins += coins
+            result["amount"] = coins
+            result["text"] = f"Найдено <code>{coins}</code> монет."
+        elif reward_type == "seed":
+            seed_id = reward_cfg["seed_id"]
+            user.seeds[seed_id] = user.seeds.get(seed_id, 0) + reward_amount
+            result["seed_id"] = seed_id
+            result["text"] = f"Найдено {reward_title} x<code>{reward_amount}</code>."
+        else:
+            item_id = reward_cfg["item_id"]
+            user.harvest[item_id] = user.harvest.get(item_id, 0) + reward_amount
+            result["item_id"] = item_id
+            result["text"] = f"Получен предмет {ITEM_TITLES.get(item_id, reward_title)} x<code>{reward_amount}</code>."
+
+        self._save_user(user)
+        return {"ok": True, "reward": result, "state": self.get_expedition_state(user_id)}
+
     def get_hub_state(self, user_id: int) -> dict:
         user = self.user(user_id)
         farm_state = self.get_farm_action_state(user_id)
+        expedition_state = self.get_expedition_state(user_id)
         return {
             "coins": user.coins,
             "level": user.level,
@@ -401,7 +551,19 @@ class GameService:
             "seeds_total": sum(user.seeds.values()),
             "inventory_used": self.inventory_used(user),
             "inventory_capacity": user.inventory_capacity,
+            "energy": expedition_state["energy"],
+            "max_energy": expedition_state["max_energy"],
+            "can_expedition": expedition_state["can_expedition"],
         }
+
+    def get_player_hub_state(self, user_id: int) -> dict:
+        return self.get_hub_state(user_id)
+
+    def get_profile_state(self, user_id: int) -> dict:
+        user = self.user(user_id)
+        progress = self.get_level_progress(user_id)
+        expedition = self.get_expedition_state(user_id)
+        return {"user": user, "progress": progress, "expedition": expedition}
     def boost_plant(self, user_id: int, plant_id: int) -> tuple[bool, str]:
         user = self.user(user_id)
         plant = next((p for p in user.farm if p.plant_id == plant_id), None)

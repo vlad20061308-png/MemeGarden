@@ -11,6 +11,7 @@ from app.handlers.deps import (
     should_warn_antispam,
 )
 from app.ui.cards import (
+    expedition_card,
     farm_card,
     format_level_reward_lines,
     help_card,
@@ -23,6 +24,7 @@ from app.ui.cards import (
 )
 from app.ui.keyboards import (
     dev_keyboard,
+    expedition_keyboard,
     farm_keyboard,
     inventory_keyboard,
     main_menu_keyboard,
@@ -66,16 +68,18 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
-    hub = game.get_hub_state(update.effective_user.id)
+    hub = game.get_player_hub_state(update.effective_user.id)
     await update.message.reply_text(start_card(hub), reply_markup=main_reply_keyboard())
-    await update.message.reply_text("Выбери раздел:", reply_markup=main_menu_keyboard())
+    await update.message.reply_text("Выбери раздел:", reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await _warn_if_needed(update, context, action="command"):
         return
+    game = get_game(context)
+    hub = game.get_player_hub_state(update.effective_user.id)
     await update.message.reply_text(help_card(), reply_markup=main_reply_keyboard())
-    await update.message.reply_text("Быстрая навигация:", reply_markup=main_menu_keyboard())
+    await update.message.reply_text("Быстрая навигация:", reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
 
 
 async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -89,7 +93,7 @@ async def plant_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    farm_state = game.get_farm_action_state(update.effective_user.id)
+    farm_state = game.get_farm_screen_state(update.effective_user.id)
     await update.message.reply_text(
         "🪴 Выбери семя для посадки:", reply_markup=plant_keyboard(state.seeds, can_plant=farm_state["can_plant"])
     )
@@ -99,10 +103,11 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
-    farm_state = game.get_farm_action_state(update.effective_user.id)
+    farm_state = game.get_farm_screen_state(update.effective_user.id)
+    expedition = game.get_expedition_state(update.effective_user.id)
     await update.message.reply_text(
         farm_card(farm_state["farm_rows"], farm_state),
-        reply_markup=farm_keyboard(farm_state),
+        reply_markup=farm_keyboard(farm_state, can_expedition=expedition["can_expedition"]),
     )
 
 
@@ -131,7 +136,8 @@ async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if rewards_block:
             lines.append(rewards_block)
 
-    await update.message.reply_text("\n".join(lines), reply_markup=main_menu_keyboard())
+    hub = game.get_player_hub_state(update.effective_user.id)
+    await update.message.reply_text("\n".join(lines), reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -139,13 +145,15 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    farm_state = game.get_farm_action_state(update.effective_user.id)
+    farm_state = game.get_farm_screen_state(update.effective_user.id)
+    expedition = game.get_expedition_state(update.effective_user.id)
     await update.message.reply_text(
         inventory_card(state),
         reply_markup=inventory_keyboard(
             state,
             has_seeds=farm_state["has_seeds"] and farm_state["free_slots"] > 0,
             has_drops=farm_state["has_inventory_items"],
+            can_expedition=expedition["can_expedition"],
         ),
     )
 
@@ -154,9 +162,11 @@ async def level_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
-    state = game.user(update.effective_user.id)
-    progress = game.get_level_progress(update.effective_user.id)
-    await update.message.reply_text(level_card(state, progress), reply_markup=main_menu_keyboard())
+    profile = game.get_profile_state(update.effective_user.id)
+    await update.message.reply_text(
+        level_card(profile["user"], profile["progress"], profile["expedition"]),
+        reply_markup=main_menu_keyboard(can_expedition=profile["expedition"]["can_expedition"]),
+    )
 
 
 async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -164,7 +174,8 @@ async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    await update.message.reply_text(f"💰 Баланс: {state.coins}🪙", reply_markup=main_menu_keyboard())
+    expedition = game.get_expedition_state(update.effective_user.id)
+    await update.message.reply_text(f"💰 Баланс: {state.coins}🪙", reply_markup=main_menu_keyboard(can_expedition=expedition["can_expedition"]))
 
 
 async def tools_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -172,13 +183,15 @@ async def tools_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    farm_state = game.get_farm_action_state(update.effective_user.id)
+    farm_state = game.get_farm_screen_state(update.effective_user.id)
+    expedition = game.get_expedition_state(update.effective_user.id)
     await update.message.reply_text(
         tools_card(state),
         reply_markup=inventory_keyboard(
             state,
             has_seeds=farm_state["has_seeds"] and farm_state["free_slots"] > 0,
             has_drops=farm_state["has_inventory_items"],
+            can_expedition=expedition["can_expedition"],
         ),
     )
 
@@ -187,9 +200,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
-    hub = game.get_hub_state(update.effective_user.id)
+    hub = game.get_player_hub_state(update.effective_user.id)
     await update.message.reply_text(menu_hint_card(hub), reply_markup=main_reply_keyboard())
-    await update.message.reply_text("Разделы:", reply_markup=main_menu_keyboard())
+    await update.message.reply_text("Разделы:", reply_markup=main_menu_keyboard(can_expedition=hub["can_expedition"]))
+
+
+async def expedition_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _warn_if_needed(update, context, action="command"):
+        return
+    game = get_game(context)
+    user_id = update.effective_user.id
+    expedition = game.get_expedition_state(user_id)
+    hub = game.get_player_hub_state(user_id)
+    await update.message.reply_text(
+        expedition_card(expedition, hub),
+        reply_markup=expedition_keyboard(expedition["can_expedition"]),
+    )
 
 
 async def reply_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -206,8 +232,8 @@ async def reply_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if text == "👤 Профиль":
         await level_handler(update, context)
         return
-    if text == "⚙️ Настройки":
-        await help_handler(update, context)
+    if text == "🧭 Экспедиция":
+        await expedition_handler(update, context)
 
 
 async def dev_ready_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
