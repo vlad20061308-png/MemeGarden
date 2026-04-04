@@ -26,9 +26,18 @@ from app.ui.keyboards import (
     farm_keyboard,
     inventory_keyboard,
     main_menu_keyboard,
+    main_reply_keyboard,
     plant_keyboard,
     shop_menu_keyboard,
 )
+
+
+async def _warn_if_needed(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str) -> bool:
+    if is_allowed(update, context, action=action):
+        return False
+    if should_warn_antispam(update, context, action=action):
+        await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    return True
 
 
 def _format_dev_state(state: dict) -> str:
@@ -54,68 +63,56 @@ def _format_dev_state(state: dict) -> str:
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
-    state = game.user(update.effective_user.id)
-    await update.message.reply_text(
-        start_card(state),
-        reply_markup=main_menu_keyboard(),
-    )
+    hub = game.get_hub_state(update.effective_user.id)
+    await update.message.reply_text(start_card(hub), reply_markup=main_reply_keyboard())
+    await update.message.reply_text("Выбери раздел:", reply_markup=main_menu_keyboard())
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
-    await update.message.reply_text(help_card(), reply_markup=main_menu_keyboard())
+    await update.message.reply_text(help_card(), reply_markup=main_reply_keyboard())
+    await update.message.reply_text("Быстрая навигация:", reply_markup=main_menu_keyboard())
 
 
 async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     await update.message.reply_text(shop_card(), reply_markup=shop_menu_keyboard())
 
 
 async def plant_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
+    farm_state = game.get_farm_action_state(update.effective_user.id)
     await update.message.reply_text(
-        "Выбери купленное семя для посадки:", reply_markup=plant_keyboard(state.seeds)
+        "🪴 Выбери семя для посадки:", reply_markup=plant_keyboard(state.seeds, can_plant=farm_state["can_plant"])
     )
 
 
 async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
-    farm_rows = game.get_farm_view(update.effective_user.id)
+    farm_state = game.get_farm_action_state(update.effective_user.id)
     await update.message.reply_text(
-        farm_card(farm_rows),
-        reply_markup=farm_keyboard([row["plant_id"] for row in farm_rows]),
+        farm_card(farm_state["farm_rows"], farm_state),
+        reply_markup=farm_keyboard(farm_state),
     )
 
 
 async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
     result = game.harvest(update.effective_user.id)
     if result["harvested"] == 0 and result["wilted"] == 0:
-        await update.message.reply_text("Пока нечего собирать. Проверь /farm")
+        await update.message.reply_text("🌾 Пока нечего собирать. Загляни на ферму чуть позже.")
         return
 
     drops = ", ".join(result["drops"]) if result["drops"] else "—"
@@ -138,19 +135,23 @@ async def harvest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    await update.message.reply_text(inventory_card(state), reply_markup=inventory_keyboard(state))
+    farm_state = game.get_farm_action_state(update.effective_user.id)
+    await update.message.reply_text(
+        inventory_card(state),
+        reply_markup=inventory_keyboard(
+            state,
+            has_seeds=farm_state["has_seeds"] and farm_state["free_slots"] > 0,
+            has_drops=farm_state["has_inventory_items"],
+        ),
+    )
 
 
 async def level_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
@@ -159,9 +160,7 @@ async def level_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
@@ -169,21 +168,46 @@ async def balance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def tools_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
     game = get_game(context)
     state = game.user(update.effective_user.id)
-    await update.message.reply_text(tools_card(state), reply_markup=inventory_keyboard(state))
+    farm_state = game.get_farm_action_state(update.effective_user.id)
+    await update.message.reply_text(
+        tools_card(state),
+        reply_markup=inventory_keyboard(
+            state,
+            has_seeds=farm_state["has_seeds"] and farm_state["free_slots"] > 0,
+            has_drops=farm_state["has_inventory_items"],
+        ),
+    )
 
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update, context, action="command"):
-        if should_warn_antispam(update, context):
-            await update.message.reply_text(ANTISPAM_MESSAGE_SOFT)
+    if await _warn_if_needed(update, context, action="command"):
         return
-    await update.message.reply_text(menu_hint_card(), reply_markup=main_menu_keyboard())
+    game = get_game(context)
+    hub = game.get_hub_state(update.effective_user.id)
+    await update.message.reply_text(menu_hint_card(hub), reply_markup=main_reply_keyboard())
+    await update.message.reply_text("Разделы:", reply_markup=main_menu_keyboard())
+
+
+async def reply_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = (update.message.text or "").strip()
+    if text == "🚜 Ферма":
+        await farm_handler(update, context)
+        return
+    if text == "🏪 Рынок":
+        await shop_handler(update, context)
+        return
+    if text == "🎒 Рюкзак":
+        await inventory_handler(update, context)
+        return
+    if text == "👤 Профиль":
+        await level_handler(update, context)
+        return
+    if text == "⚙️ Настройки":
+        await help_handler(update, context)
 
 
 async def dev_ready_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

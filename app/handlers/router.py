@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from app.handlers.callback_handlers import (
     dev_add_1000_callback,
@@ -13,13 +13,14 @@ from app.handlers.callback_handlers import (
     farm_boost_callback,
     farm_harvest_callback,
     farm_refresh_callback,
-    menu_open_callback,
     menu_back_callback,
+    menu_open_callback,
     noop_callback,
     plant_seed_callback,
     shop_buy_seed_callback,
     shop_buy_tool_callback,
     shop_section_callback,
+    unavailable_callback,
 )
 from app.handlers.command_handlers import (
     balance_handler,
@@ -37,6 +38,7 @@ from app.handlers.command_handlers import (
     level_handler,
     menu_handler,
     plant_handler,
+    reply_menu_handler,
     shop_handler,
     start_handler,
     tools_handler,
@@ -63,6 +65,8 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("dev_balance_take", dev_balance_take_handler))
     app.add_handler(CommandHandler("dev_state", dev_state_handler))
 
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_menu_handler))
+
     app.add_handler(CallbackQueryHandler(shop_buy_seed_callback, pattern=r"^shop_buy_seed:"))
     app.add_handler(CallbackQueryHandler(shop_buy_tool_callback, pattern=r"^shop_buy_tool:"))
     app.add_handler(CallbackQueryHandler(shop_section_callback, pattern=r"^shop_section:"))
@@ -75,6 +79,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(drop_item_callback, pattern=r"^drop_item:"))
     app.add_handler(CallbackQueryHandler(menu_back_callback, pattern=r"^menu_back$"))
     app.add_handler(CallbackQueryHandler(noop_callback, pattern=r"^noop$"))
+    app.add_handler(CallbackQueryHandler(unavailable_callback, pattern=r"^unavailable:"))
     app.add_handler(CallbackQueryHandler(dev_ready_all_callback, pattern=r"^dev_ready_all$"))
     app.add_handler(CallbackQueryHandler(dev_wilt_all_callback, pattern=r"^dev_wilt_all$"))
     app.add_handler(CallbackQueryHandler(dev_add_1000_callback, pattern=r"^dev_add_1000$"))

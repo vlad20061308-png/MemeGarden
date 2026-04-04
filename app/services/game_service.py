@@ -354,6 +354,54 @@ class GameService:
             )
         return rows
 
+
+    def get_farm_action_state(self, user_id: int) -> dict:
+        user = self.user(user_id)
+        farm_rows = self.get_farm_view(user_id)
+
+        can_harvest = any(row["state"] in {STATE_READY, STATE_WILTED} for row in farm_rows)
+        can_plant = len(user.farm) < MAX_FARM_SLOTS and sum(user.seeds.values()) > 0
+
+        boost_plant_id = None
+        for row in farm_rows:
+            if row["state"] == STATE_GROWING and row["boost_used"] < row["boost_max"] and row["next_boost_in"] <= 0:
+                boost_plant_id = row["plant_id"]
+                break
+
+        counts = {
+            "growing": sum(1 for row in farm_rows if row["state"] == STATE_GROWING),
+            "ready": sum(1 for row in farm_rows if row["state"] == STATE_READY),
+            "wilted": sum(1 for row in farm_rows if row["state"] == STATE_WILTED),
+        }
+
+        return {
+            "farm_rows": farm_rows,
+            "can_harvest": can_harvest,
+            "can_plant": can_plant,
+            "can_accelerate": boost_plant_id is not None,
+            "boost_plant_id": boost_plant_id,
+            "has_seeds": sum(user.seeds.values()) > 0,
+            "has_tools": any(qty > 0 and tool_id in TOOLS for tool_id, qty in user.owned_tools.items()),
+            "has_inventory_items": self.inventory_used(user) > 0,
+            "farm_counts": counts,
+            "free_slots": max(MAX_FARM_SLOTS - len(user.farm), 0),
+        }
+
+    def get_hub_state(self, user_id: int) -> dict:
+        user = self.user(user_id)
+        farm_state = self.get_farm_action_state(user_id)
+        return {
+            "coins": user.coins,
+            "level": user.level,
+            "xp": user.xp,
+            "farm_total": len(user.farm),
+            "farm_ready": farm_state["farm_counts"]["ready"],
+            "farm_growing": farm_state["farm_counts"]["growing"],
+            "farm_wilted": farm_state["farm_counts"]["wilted"],
+            "seeds_total": sum(user.seeds.values()),
+            "inventory_used": self.inventory_used(user),
+            "inventory_capacity": user.inventory_capacity,
+        }
     def boost_plant(self, user_id: int, plant_id: int) -> tuple[bool, str]:
         user = self.user(user_id)
         plant = next((p for p in user.farm if p.plant_id == plant_id), None)
