@@ -9,13 +9,13 @@ from app.data.models import UserState
 def main_reply_keyboard() -> ReplyKeyboardMarkup:
     rows = [
         [KeyboardButton("🚜 Ферма"), KeyboardButton("🏪 Рынок")],
-        [KeyboardButton("🎒 Рюкзак"), KeyboardButton("👤 Профиль")],
-        [KeyboardButton("⚙️ Настройки")],
+        [KeyboardButton("🎒 Рюкзак"), KeyboardButton("🧭 Экспедиция")],
+        [KeyboardButton("👤 Профиль")],
     ]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(can_expedition: bool = True) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton("🚜 Ферма", callback_data="menu_open:farm"),
@@ -24,6 +24,12 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("🎒 Рюкзак", callback_data="menu_open:inventory"),
             InlineKeyboardButton("👤 Профиль", callback_data="menu_open:profile"),
+        ],
+        [
+            InlineKeyboardButton(
+                "🧭 В экспедицию" if can_expedition else "❌ В экспедицию",
+                callback_data="menu_open:expedition" if can_expedition else "unavailable:expedition",
+            )
         ],
         [InlineKeyboardButton("🔄 Обновить", callback_data="menu_open:refresh")],
     ]
@@ -102,7 +108,7 @@ def plant_keyboard(user_seeds: dict[str, int], can_plant: bool) -> InlineKeyboar
     return InlineKeyboardMarkup(rows)
 
 
-def farm_keyboard(action_state: dict) -> InlineKeyboardMarkup:
+def farm_keyboard(action_state: dict, can_expedition: bool) -> InlineKeyboardMarkup:
     boost_callback = (
         f"farm_boost:{action_state['boost_plant_id']}" if action_state["can_accelerate"] else "unavailable:boost"
     )
@@ -127,15 +133,18 @@ def farm_keyboard(action_state: dict) -> InlineKeyboardMarkup:
             )
         ],
         [
+            InlineKeyboardButton("🧭 Экспедиция" if can_expedition else "❌ Экспедиция", callback_data="menu_open:expedition" if can_expedition else "unavailable:expedition"),
             InlineKeyboardButton("🔄 Обновить", callback_data="farm_refresh"),
-            InlineKeyboardButton("🏪 В рынок", callback_data="menu_open:shop"),
         ],
-        [InlineKeyboardButton("🏠 В меню", callback_data="menu_back")],
+        [
+            InlineKeyboardButton("🏪 В рынок", callback_data="menu_open:shop"),
+            InlineKeyboardButton("🏠 В меню", callback_data="menu_back"),
+        ],
     ]
     return InlineKeyboardMarkup(rows)
 
 
-def inventory_keyboard(state: UserState, has_seeds: bool, has_drops: bool) -> InlineKeyboardMarkup:
+def inventory_keyboard(state: UserState, has_seeds: bool, has_drops: bool, can_expedition: bool) -> InlineKeyboardMarkup:
     rows = []
     for tool_id, qty in state.owned_tools.items():
         if qty > 0 and tool_id in TOOLS:
@@ -167,10 +176,26 @@ def inventory_keyboard(state: UserState, has_seeds: bool, has_drops: bool) -> In
     )
     rows.append(
         [
-            InlineKeyboardButton("🛒 Рынок", callback_data="menu_open:shop"),
+            InlineKeyboardButton("🧭 Экспедиция" if can_expedition else "❌ Экспедиция", callback_data="menu_open:expedition" if can_expedition else "unavailable:expedition"),
             InlineKeyboardButton("🏠 В меню", callback_data="menu_back"),
         ]
     )
+    return InlineKeyboardMarkup(rows)
+
+
+def expedition_keyboard(can_expedition: bool) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                "🧭 В экспедицию" if can_expedition else "❌ В экспедицию",
+                callback_data="expedition_run" if can_expedition else "unavailable:expedition",
+            )
+        ],
+        [
+            InlineKeyboardButton("🚜 На ферму", callback_data="menu_open:farm"),
+            InlineKeyboardButton("🏠 В меню", callback_data="menu_back"),
+        ],
+    ]
     return InlineKeyboardMarkup(rows)
 
 

@@ -219,6 +219,26 @@ COMMANDS = [
     ("farm", "Проверить ферму"),
     ("harvest", "Собрать готовый урожай"),
     ("inventory", "Инвентарь и инструмент"),
+    ("expedition", "Экспедиция и энергия"),
     ("balance", "Баланс монет"),
     ("level", "Уровень и XP"),
 ]
+
+
+EXPEDITION_DEFAULT_MAX_ENERGY = 5
+EXPEDITION_DEFAULT_ENERGY = 5
+EXPEDITION_ENERGY_COST = 1
+EXPEDITION_ENERGY_REGEN_SECONDS = 20 * 60
+
+EXPEDITION_LOOT_TABLE = [
+    {"type": "coins", "title": "🪙 Монеты", "chance": 42.0, "min": 8, "max": 20},
+    {"type": "seed", "title": "🌱 Стартовое семя", "chance": 28.0, "seed_id": "starter_seed", "amount": 1},
+    {"type": "seed", "title": "🌾 Обычное семя", "chance": 17.0, "seed_id": "common_seed", "amount": 1},
+    {"type": "item", "title": "🎁 Таинственный подарок", "chance": 8.0, "item_id": "expedition_gift", "amount": 1},
+    {"type": "coins", "title": "💰 Кошелёк монет", "chance": 5.0, "min": 30, "max": 55},
+]
+
+ITEM_TITLES = {"expedition_gift": "🎁 Таинственный подарок"}
+for _tree in TREE_TYPES.values():
+    for _drop in _tree.get("drops", []):
+        ITEM_TITLES.setdefault(_drop["id"], _drop["title"])

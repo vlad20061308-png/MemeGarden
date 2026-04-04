@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 from telegram import BotCommand, Update
-from telegram.ext import Application, ContextTypes
+from telegram.constants import ParseMode
+from telegram.ext import Application, ContextTypes, Defaults
 
 from app.config import load_config
 from app.data.constants import COMMANDS
@@ -25,7 +26,7 @@ async def post_init(application: Application) -> None:
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.exception("Exception while handling update", exc_info=context.error)
     if isinstance(update, Update) and update.effective_message:
-        await update.effective_message.reply_text("Произошла ошибка. Попробуй позже.")
+        await update.effective_message.reply_text("⚠️ Что-то пошло не так. Попробуй ещё раз чуть позже.")
 
 
 def build_app() -> Application:
@@ -34,7 +35,8 @@ def build_app() -> Application:
     game = GameService(storage)
     anti_spam = AntiSpamService(cfg.anti_spam_seconds)
 
-    app = Application.builder().token(cfg.bot_token).post_init(post_init).build()
+    defaults = Defaults(parse_mode=ParseMode.HTML)
+    app = Application.builder().token(cfg.bot_token).post_init(post_init).defaults(defaults).build()
 
     app.bot_data["game"] = game
     app.bot_data["anti_spam"] = anti_spam

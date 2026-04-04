@@ -31,3 +31,6 @@ class UserState:
     xp: int = 0
     level: int = 0
     claimed_level_rewards: List[int] = field(default_factory=list)
+    energy: int = 5
+    max_energy: int = 5
+    last_energy_regen_at: float = 0.0
