@@ -1,29 +1,31 @@
 from __future__ import annotations
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from app.data.constants import SEED_TYPES, TOOLS
 from app.data.models import UserState
 
 
+def main_reply_keyboard() -> ReplyKeyboardMarkup:
+    rows = [
+        [KeyboardButton("🚜 Ферма"), KeyboardButton("🏪 Рынок")],
+        [KeyboardButton("🎒 Рюкзак"), KeyboardButton("👤 Профиль")],
+        [KeyboardButton("⚙️ Настройки")],
+    ]
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
+
+
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     rows = [
         [
-            InlineKeyboardButton("🌱 Ферма", callback_data="menu_open:farm"),
-            InlineKeyboardButton("🛒 Магазин", callback_data="menu_open:shop"),
+            InlineKeyboardButton("🚜 Ферма", callback_data="menu_open:farm"),
+            InlineKeyboardButton("🏪 Рынок", callback_data="menu_open:shop"),
         ],
         [
-            InlineKeyboardButton("🎒 Инвентарь", callback_data="menu_open:inventory"),
-            InlineKeyboardButton("🛠 Инструменты", callback_data="menu_open:tools"),
-        ],
-        [
-            InlineKeyboardButton("🌰 Посадить", callback_data="menu_open:plant"),
-            InlineKeyboardButton("🧺 Собрать", callback_data="menu_open:harvest"),
-        ],
-        [
+            InlineKeyboardButton("🎒 Рюкзак", callback_data="menu_open:inventory"),
             InlineKeyboardButton("👤 Профиль", callback_data="menu_open:profile"),
-            InlineKeyboardButton("🔄 Обновить", callback_data="menu_open:refresh"),
         ],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="menu_open:refresh")],
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -34,7 +36,10 @@ def shop_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🌱 Семена", callback_data="shop_section:seeds"),
             InlineKeyboardButton("🛠 Инструменты", callback_data="shop_section:tools"),
         ],
-        [InlineKeyboardButton("⬅️ В меню", callback_data="menu_back")],
+        [
+            InlineKeyboardButton("🚜 На ферму", callback_data="menu_open:farm"),
+            InlineKeyboardButton("🏠 В меню", callback_data="menu_back"),
+        ],
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -50,8 +55,8 @@ def shop_seeds_keyboard() -> InlineKeyboardMarkup:
                 )
             ]
         )
-    rows.append([InlineKeyboardButton("⬅️ Разделы магазина", callback_data="menu_open:shop")])
-    rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_back")])
+    rows.append([InlineKeyboardButton("⬅️ Разделы рынка", callback_data="menu_open:shop")])
+    rows.append([InlineKeyboardButton("🏠 В меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -66,55 +71,78 @@ def shop_tools_keyboard() -> InlineKeyboardMarkup:
                 )
             ]
         )
-    rows.append([InlineKeyboardButton("⬅️ Разделы магазина", callback_data="menu_open:shop")])
-    rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_back")])
+    rows.append([InlineKeyboardButton("⬅️ Разделы рынка", callback_data="menu_open:shop")])
+    rows.append([InlineKeyboardButton("🏠 В меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(rows)
 
 
-def plant_keyboard(user_seeds: dict[str, int]) -> InlineKeyboardMarkup:
+def plant_keyboard(user_seeds: dict[str, int], can_plant: bool) -> InlineKeyboardMarkup:
     rows = []
-    for seed_id, qty in user_seeds.items():
-        if qty > 0 and seed_id in SEED_TYPES:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        f"Посадить {SEED_TYPES[seed_id]['title']} x{qty}",
-                        callback_data=f"plant_seed:{seed_id}",
-                    )
-                ]
-            )
+    if can_plant:
+        for seed_id, qty in user_seeds.items():
+            if qty > 0 and seed_id in SEED_TYPES:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            f"🪴 {SEED_TYPES[seed_id]['title']} x{qty}",
+                            callback_data=f"plant_seed:{seed_id}",
+                        )
+                    ]
+                )
+
     if not rows:
-        rows.append([InlineKeyboardButton("Нет доступных семян", callback_data="noop")])
-    return InlineKeyboardMarkup(rows)
+        rows.append([InlineKeyboardButton("❌ Сейчас посадка недоступна", callback_data="unavailable:plant")])
 
-
-def farm_keyboard(plant_ids: list[int]) -> InlineKeyboardMarkup:
-    rows = []
-    for pid in plant_ids[:4]:
-        rows.append(
-            [
-                InlineKeyboardButton("⚡ Ускорить", callback_data=f"farm_boost:{pid}"),
-                InlineKeyboardButton("🧺 Собрать", callback_data="farm_harvest"),
-            ]
-        )
     rows.append(
         [
-            InlineKeyboardButton("🔄 Обновить ферму", callback_data="farm_refresh"),
-            InlineKeyboardButton("🌰 Посадить", callback_data="menu_open:plant"),
+            InlineKeyboardButton("🚜 К ферме", callback_data="menu_open:farm"),
+            InlineKeyboardButton("🏠 В меню", callback_data="menu_back"),
         ]
     )
-    rows.append([InlineKeyboardButton("⬅️ Главное меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(rows)
 
 
-def inventory_keyboard(state: UserState) -> InlineKeyboardMarkup:
+def farm_keyboard(action_state: dict) -> InlineKeyboardMarkup:
+    boost_callback = (
+        f"farm_boost:{action_state['boost_plant_id']}" if action_state["can_accelerate"] else "unavailable:boost"
+    )
+    harvest_callback = "farm_harvest" if action_state["can_harvest"] else "unavailable:harvest"
+    plant_callback = "menu_open:plant" if action_state["can_plant"] else "unavailable:plant"
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                "⚡ Ускорить" if action_state["can_accelerate"] else "❌ Ускорить",
+                callback_data=boost_callback,
+            ),
+            InlineKeyboardButton(
+                "🌾 Собрать" if action_state["can_harvest"] else "❌ Собрать",
+                callback_data=harvest_callback,
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🪴 Посадить" if action_state["can_plant"] else "❌ Посадить",
+                callback_data=plant_callback,
+            )
+        ],
+        [
+            InlineKeyboardButton("🔄 Обновить", callback_data="farm_refresh"),
+            InlineKeyboardButton("🏪 В рынок", callback_data="menu_open:shop"),
+        ],
+        [InlineKeyboardButton("🏠 В меню", callback_data="menu_back")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def inventory_keyboard(state: UserState, has_seeds: bool, has_drops: bool) -> InlineKeyboardMarkup:
     rows = []
     for tool_id, qty in state.owned_tools.items():
         if qty > 0 and tool_id in TOOLS:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        f"Экипировать {TOOLS[tool_id]['title']}",
+                        f"🛠 Экипировать {TOOLS[tool_id]['title']}",
                         callback_data=f"equip_tool:{tool_id}",
                     )
                 ]
@@ -125,18 +153,22 @@ def inventory_keyboard(state: UserState) -> InlineKeyboardMarkup:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        f"Выбросить {item_id} (-1)",
+                        f"🗑 Удалить {item_id} (-1)",
                         callback_data=f"drop_item:{item_id}",
                     )
                 ]
             )
 
-    if not rows:
-        rows.append([InlineKeyboardButton("Пока нечего нажимать", callback_data="noop")])
     rows.append(
         [
-            InlineKeyboardButton("🛠 Инструменты", callback_data="menu_open:tools"),
-            InlineKeyboardButton("⬅️ Главное меню", callback_data="menu_back"),
+            InlineKeyboardButton("🪴 Посадить" if has_seeds else "❌ Посадить", callback_data="menu_open:plant" if has_seeds else "unavailable:plant"),
+            InlineKeyboardButton("🌾 К сбору" if has_drops else "❌ Дроп пуст", callback_data="menu_open:farm" if has_drops else "unavailable:inventory"),
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton("🛒 Рынок", callback_data="menu_open:shop"),
+            InlineKeyboardButton("🏠 В меню", callback_data="menu_back"),
         ]
     )
     return InlineKeyboardMarkup(rows)
