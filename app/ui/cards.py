@@ -23,8 +23,19 @@ def energy_bar(current: int, max_energy: int) -> str:
     return f"<code>{filled}{empty}</code> <code>{current}/{max_energy}</code>"
 
 
+def _event_lines(event: dict | None) -> list[str]:
+    if not event or not event.get("active"):
+        return []
+    return [
+        "",
+        "<b>🔥 ACTIVE EVENT</b>",
+        f"{event.get('title', 'Unknown Event')}",
+        f"⏳ <code>{format_seconds(int(event.get('remaining_seconds', 0)))}</code> remaining",
+    ]
+
+
 def start_card(hub: dict) -> str:
-    return (
+    text = (
         "<b>🌿 MemeGarden — игровой хаб</b>\n"
         f"{SEP}\n"
         f"💰 Баланс: <code>{hub['coins']}🪙</code>\n"
@@ -35,16 +46,20 @@ def start_card(hub: dict) -> str:
         f"🎒 Рюкзак: <code>{hub['inventory_used']}/{hub['inventory_capacity']}</code>\n\n"
         "<b>⬇️ Разделы — на нижней клавиатуре.</b>"
     )
+    lines = [text, *_event_lines(hub.get("event"))]
+    return "\n".join(lines)
 
 
 def menu_hint_card(hub: dict) -> str:
-    return (
+    text = (
         "<b>🏠 Главное меню</b>\n"
         f"{SEP}\n"
         f"💰 <code>{hub['coins']}🪙</code> · 📈 lvl <code>{hub['level']}</code> · ⚡ <code>{hub['energy']}/{hub['max_energy']}</code>\n"
         f"🌾 Ready на ферме: <code>{hub['farm_ready']}</code>\n"
         "Открой нужный раздел кнопками ниже или через inline-навигацию."
     )
+    lines = [text, *_event_lines(hub.get("event"))]
+    return "\n".join(lines)
 
 
 def format_level_reward_lines(granted_rewards: list[dict]) -> str:
@@ -160,6 +175,7 @@ def farm_card(farm_rows: list[dict], action_state: dict) -> str:
                 f"💰 Доход: ~<code>{row['approx_value']}🪙</code>",
             ]
         )
+    lines.extend(_event_lines(action_state.get("event")))
     return "\n".join(lines)
 
 
@@ -195,7 +211,7 @@ def tools_card(state: UserState) -> str:
 
 def expedition_card(expedition: dict, hub: dict) -> str:
     regen_note = "Энергия полная. Можно идти в поход." if expedition["time_to_next"] == 0 else f"До +1 энергии: <code>{format_seconds(expedition['time_to_next'])}</code>"
-    return (
+    text = (
         "<b>🧭 Экспедиция</b>\n"
         f"{SEP}\n"
         f"⚡ Энергия: {energy_bar(expedition['energy'], expedition['max_energy'])}\n"
@@ -204,6 +220,8 @@ def expedition_card(expedition: dict, hub: dict) -> str:
         f"⏱ {regen_note}\n\n"
         "Отправляйся в экспедицию, чтобы найти монеты, семена и редкие подарки."
     )
+    lines = [text, *_event_lines(expedition.get("event") or hub.get("event"))]
+    return "\n".join(lines)
 
 
 def expedition_result_card(result: dict) -> str:

@@ -242,3 +242,48 @@ ITEM_TITLES = {"expedition_gift": "🎁 Таинственный подарок"
 for _tree in TREE_TYPES.values():
     for _drop in _tree.get("drops", []):
         ITEM_TITLES.setdefault(_drop["id"], _drop["title"])
+
+EVENT_DURATION_RANGE_SECONDS = (30 * 60, 3 * 60 * 60)
+EVENT_COOLDOWN_RANGE_SECONDS = (5 * 60, 20 * 60)
+EVENT_MINI_CHANCE = 0.14
+EVENT_MINI_DURATION_RANGE_SECONDS = (10 * 60, 15 * 60)
+
+EVENT_DEFINITIONS = [
+    {
+        "id": "sakura_bloom",
+        "title": "🌸 Sakura Bloom",
+        "tree_bonus": {"sakura": 1.7},
+        "growth_bonus": 0.0,
+        "drop_bonus": 0.12,
+        "extra_drop": {"id": "sakura_charm", "title": "🎐 Sakura Charm", "chance": 0.08},
+    },
+    {
+        "id": "heatwave",
+        "title": "🔥 Heatwave",
+        "tree_bonus": {},
+        "growth_bonus": 0.22,
+        "drop_bonus": 0.0,
+        "extra_drop": None,
+    },
+    {
+        "id": "gold_rush",
+        "title": "💰 Gold Rush",
+        "tree_bonus": {},
+        "growth_bonus": 0.0,
+        "drop_bonus": 0.24,
+        "extra_drop": {"id": "golden_ticket", "title": "🎫 Golden Ticket", "chance": 0.05},
+    },
+]
+
+EVENT_MINI_DEFINITION = {
+    "id": "lucky_wind",
+    "title": "🍀 Lucky Wind",
+    "tree_bonus": {},
+    "growth_bonus": 0.1,
+    "drop_bonus": 0.18,
+    "extra_drop": {"id": "lucky_leaf", "title": "🍃 Lucky Leaf", "chance": 0.1},
+}
+
+ITEM_TITLES.setdefault("sakura_charm", "🎐 Sakura Charm")
+ITEM_TITLES.setdefault("golden_ticket", "🎫 Golden Ticket")
+ITEM_TITLES.setdefault("lucky_leaf", "🍃 Lucky Leaf")

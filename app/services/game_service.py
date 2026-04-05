@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import random
+from typing import Any
 
 from app.data.constants import (
     DEFAULT_INVENTORY_CAPACITY,
+    EVENT_COOLDOWN_RANGE_SECONDS,
+    EVENT_DEFINITIONS,
+    EVENT_DURATION_RANGE_SECONDS,
+    EVENT_MINI_CHANCE,
+    EVENT_MINI_DEFINITION,
+    EVENT_MINI_DURATION_RANGE_SECONDS,
     EXPEDITION_DEFAULT_ENERGY,
     EXPEDITION_DEFAULT_MAX_ENERGY,
     EXPEDITION_ENERGY_COST,
@@ -35,9 +42,130 @@ class GameService:
     META_ENERGY_KEY = "__meta_energy"
     META_MAX_ENERGY_KEY = "__meta_max_energy"
     META_ENERGY_REGEN_TS_KEY = "__meta_energy_regen_at"
+    META_EVENT_KEY = "__global_event"
+    META_EVENT_NEXT_TS_KEY = "__global_event_next_at"
 
     def __init__(self, storage: Storage) -> None:
         self.storage = storage
+
+    def _safe_float(self, value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _safe_event(self, payload: object) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+        event_id = str(payload.get("id", "")).strip()
+        title = str(payload.get("title", "")).strip()
+        if not event_id or not title:
+            return None
+
+        start_ts = max(self._safe_float(payload.get("start_ts"), 0.0), 0.0)
+        end_ts = max(self._safe_float(payload.get("end_ts"), 0.0), 0.0)
+        duration = max(int(self._safe_float(payload.get("duration"), 0)), 0)
+        if end_ts <= start_ts:
+            return None
+
+        tree_bonus_raw = payload.get("tree_bonus", {})
+        tree_bonus: dict[str, float] = {}
+        if isinstance(tree_bonus_raw, dict):
+            for tree_id, value in tree_bonus_raw.items():
+                multiplier = self._safe_float(value, 1.0)
+                if multiplier > 0:
+                    tree_bonus[str(tree_id)] = multiplier
+
+        growth_bonus = max(self._safe_float(payload.get("growth_bonus"), 0.0), 0.0)
+        drop_bonus = max(self._safe_float(payload.get("drop_bonus"), 0.0), 0.0)
+        extra_drop = None
+        extra_raw = payload.get("extra_drop")
+        if isinstance(extra_raw, dict):
+            extra_id = str(extra_raw.get("id", "")).strip()
+            extra_title = str(extra_raw.get("title", "")).strip()
+            extra_chance = max(self._safe_float(extra_raw.get("chance"), 0.0), 0.0)
+            if extra_id and extra_title and extra_chance > 0:
+                extra_drop = {"id": extra_id, "title": extra_title, "chance": extra_chance}
+
+        return {
+            "id": event_id,
+            "title": title,
+            "duration": duration,
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "tree_bonus": tree_bonus,
+            "growth_bonus": growth_bonus,
+            "drop_bonus": drop_bonus,
+            "extra_drop": extra_drop,
+        }
+
+    def generate_random_event(self) -> dict[str, Any]:
+        source_pool = EVENT_DEFINITIONS
+        duration_range = EVENT_DURATION_RANGE_SECONDS
+        if random.random() <= EVENT_MINI_CHANCE:
+            source_pool = [EVENT_MINI_DEFINITION]
+            duration_range = EVENT_MINI_DURATION_RANGE_SECONDS
+
+        template = random.choice(source_pool)
+        event = self._safe_event(template) or {
+            "id": "fallback_event",
+            "title": "✨ Lucky Hour",
+            "tree_bonus": {},
+            "growth_bonus": 0.0,
+            "drop_bonus": 0.0,
+            "extra_drop": None,
+            "duration": 0,
+            "start_ts": 0.0,
+            "end_ts": 0.0,
+        }
+
+        current = now_ts()
+        duration = random.randint(duration_range[0], duration_range[1])
+        event["duration"] = duration
+        event["start_ts"] = current
+        event["end_ts"] = current + duration
+        return event
+
+    def get_current_event(self) -> dict[str, Any] | None:
+        event = self._safe_event(self.storage.get_meta(self.META_EVENT_KEY))
+        if not event:
+            return None
+        if now_ts() >= float(event.get("end_ts", 0.0)):
+            return None
+        return event
+
+    def update_event_if_needed(self) -> dict[str, Any] | None:
+        current_event = self.get_current_event()
+        if current_event:
+            return current_event
+
+        current = now_ts()
+        next_event_at = max(self._safe_float(self.storage.get_meta(self.META_EVENT_NEXT_TS_KEY), 0.0), 0.0)
+        if current < next_event_at:
+            self.storage.set_meta(self.META_EVENT_KEY, None)
+            self.storage.save()
+            return None
+
+        new_event = self.generate_random_event()
+        self.storage.set_meta(self.META_EVENT_KEY, new_event)
+        cooldown = random.randint(EVENT_COOLDOWN_RANGE_SECONDS[0], EVENT_COOLDOWN_RANGE_SECONDS[1])
+        self.storage.set_meta(self.META_EVENT_NEXT_TS_KEY, float(new_event["end_ts"]) + cooldown)
+        self.storage.save()
+        return new_event
+
+    def _event_compact_view(self, event: dict[str, Any] | None) -> dict[str, Any]:
+        if not event:
+            return {"active": False}
+        remaining = max(int(float(event.get("end_ts", 0.0)) - now_ts()), 0)
+        return {
+            "active": remaining > 0,
+            "id": event.get("id", ""),
+            "title": event.get("title", "Unknown Event"),
+            "remaining_seconds": remaining,
+            "growth_bonus": max(self._safe_float(event.get("growth_bonus"), 0.0), 0.0),
+            "drop_bonus": max(self._safe_float(event.get("drop_bonus"), 0.0), 0.0),
+            "extra_drop": event.get("extra_drop"),
+        }
 
     def _claimed_levels_to_mask(self, levels: list[int]) -> int:
         mask = 0
@@ -129,6 +257,7 @@ class GameService:
         self.storage.save()
 
     def user(self, user_id: int) -> UserState:
+        self.update_event_if_needed()
         user = self.storage.get_or_create_user(user_id)
         changed = self._load_progression_meta(user)
         changed = self._load_energy_meta(user) or changed
@@ -289,17 +418,37 @@ class GameService:
         }
 
     def _roll_weighted(self, weighted_map: dict[str, float]) -> str:
-        roll = random.uniform(0, 100)
+        total = sum(max(float(chance), 0.0) for chance in weighted_map.values())
+        if total <= 0:
+            return next(iter(weighted_map))
+        roll = random.uniform(0, total)
         cumulative = 0.0
         fallback = next(iter(weighted_map))
         for item_id, chance in weighted_map.items():
             if chance <= 0:
                 continue
-            cumulative += chance
+            cumulative += float(chance)
             if roll <= cumulative:
                 return item_id
             fallback = item_id
         return fallback
+
+    def _tree_weights_with_event(
+        self, seed_trees: dict[str, float], event: dict[str, Any] | None
+    ) -> dict[str, float]:
+        if not event:
+            return seed_trees
+        bonuses = event.get("tree_bonus")
+        if not isinstance(bonuses, dict):
+            return seed_trees
+
+        adjusted: dict[str, float] = {}
+        for tree_id, chance in seed_trees.items():
+            multiplier = max(self._safe_float(bonuses.get(tree_id), 1.0), 0.0)
+            adjusted[tree_id] = max(float(chance), 0.0) * multiplier
+        if sum(adjusted.values()) <= 0:
+            return seed_trees
+        return adjusted
 
     def _plant_state(self, plant: PlantRecord) -> str:
         current = now_ts()
@@ -345,13 +494,15 @@ class GameService:
 
     def plant_seed(self, user_id: int, seed_id: str) -> tuple[bool, str]:
         user = self.user(user_id)
+        event = self.update_event_if_needed()
         if len(user.farm) >= MAX_FARM_SLOTS:
             return False, "Ферма заполнена. Сначала собери или убери растения."
         if user.seeds.get(seed_id, 0) <= 0:
             return False, "Нет купленных семян этого типа."
 
         seed_data = SEED_TYPES[seed_id]
-        tree_id = self._roll_weighted(seed_data["trees"])
+        tree_weights = self._tree_weights_with_event(seed_data["trees"], event)
+        tree_id = self._roll_weighted(tree_weights)
         tree_data = TREE_TYPES[tree_id]
 
         tool_pct = 0
@@ -359,7 +510,9 @@ class GameService:
             tool_pct = TOOLS[user.active_tool]["reduction_pct"]
 
         base = tree_data["grow_seconds"]
-        grow_seconds = max(int(base * (100 - tool_pct) / 100), 60)
+        growth_bonus = max(self._safe_float((event or {}).get("growth_bonus"), 0.0), 0.0)
+        event_growth_multiplier = max(1.0 - growth_bonus, 0.1)
+        grow_seconds = max(int(base * (100 - tool_pct) / 100 * event_growth_multiplier), 60)
         ready_window = max(600, int(grow_seconds * 0.5))
         current = now_ts()
 
@@ -390,11 +543,14 @@ class GameService:
         self._save_user(user)
 
         tool_note = f" (инструмент: -{tool_pct}%)" if tool_pct else ""
+        event_note = ""
+        if event and growth_bonus > 0:
+            event_note = f"\n🔥 Ивент ускорил рост на {int(growth_bonus * 100)}%."
         xp_note = f"\n✨ XP: +{xp_result['xp_added']} ({xp_result['xp_total']} всего)"
         level_note = ""
         if xp_result["leveled_up"]:
             level_note = f"\n🎉 Уровень повышен: {xp_result['old_level']} → {xp_result['new_level']}"
-        return True, f"Посажено: {seed_data['title']} → {tree_data['title']}{tool_note}{xp_note}{level_note}"
+        return True, f"Посажено: {seed_data['title']} → {tree_data['title']}{tool_note}{event_note}{xp_note}{level_note}"
 
     def get_farm_view(self, user_id: int) -> list[dict]:
         user = self.user(user_id)
@@ -436,6 +592,7 @@ class GameService:
 
     def get_farm_action_state(self, user_id: int) -> dict:
         user = self.user(user_id)
+        event = self.update_event_if_needed()
         farm_rows = self.get_farm_view(user_id)
 
         can_harvest = any(row["state"] in {STATE_READY, STATE_WILTED} for row in farm_rows)
@@ -464,6 +621,7 @@ class GameService:
             "has_inventory_items": self.inventory_used(user) > 0,
             "farm_counts": counts,
             "free_slots": max(MAX_FARM_SLOTS - len(user.farm), 0),
+            "event": self._event_compact_view(event),
         }
 
     def get_farm_screen_state(self, user_id: int) -> dict:
@@ -489,16 +647,20 @@ class GameService:
 
     def get_expedition_state(self, user_id: int) -> dict:
         user = self.user(user_id)
+        event = self.update_event_if_needed()
         return {
             "energy": user.energy,
             "max_energy": user.max_energy,
             "energy_cost": EXPEDITION_ENERGY_COST,
             "can_expedition": user.energy >= EXPEDITION_ENERGY_COST,
             "time_to_next": self._energy_eta_seconds(user),
+            "event": self._event_compact_view(event),
         }
 
     def run_expedition(self, user_id: int) -> dict:
         user = self.user(user_id)
+        event = self.update_event_if_needed()
+        drop_bonus = max(self._safe_float((event or {}).get("drop_bonus"), 0.0), 0.0)
         self.restore_energy_if_needed(user, save=False)
         if user.energy < EXPEDITION_ENERGY_COST:
             return {
@@ -519,18 +681,26 @@ class GameService:
 
         if reward_type == "coins":
             coins = random.randint(int(reward_cfg["min"]), int(reward_cfg["max"]))
+            if drop_bonus > 0:
+                coins = max(int(coins * (1.0 + drop_bonus * 0.5)), coins)
             user.coins += coins
             result["amount"] = coins
             result["text"] = f"Найдено <code>{coins}</code> монет."
         elif reward_type == "seed":
             seed_id = reward_cfg["seed_id"]
+            if drop_bonus > 0 and random.random() <= min(drop_bonus, 0.35):
+                reward_amount += 1
             user.seeds[seed_id] = user.seeds.get(seed_id, 0) + reward_amount
             result["seed_id"] = seed_id
+            result["amount"] = reward_amount
             result["text"] = f"Найдено {reward_title} x<code>{reward_amount}</code>."
         else:
             item_id = reward_cfg["item_id"]
+            if drop_bonus > 0 and random.random() <= min(drop_bonus, 0.25):
+                reward_amount += 1
             user.harvest[item_id] = user.harvest.get(item_id, 0) + reward_amount
             result["item_id"] = item_id
+            result["amount"] = reward_amount
             result["text"] = f"Получен предмет {ITEM_TITLES.get(item_id, reward_title)} x<code>{reward_amount}</code>."
 
         self._save_user(user)
@@ -538,6 +708,7 @@ class GameService:
 
     def get_hub_state(self, user_id: int) -> dict:
         user = self.user(user_id)
+        event = self.update_event_if_needed()
         farm_state = self.get_farm_action_state(user_id)
         expedition_state = self.get_expedition_state(user_id)
         return {
@@ -554,6 +725,7 @@ class GameService:
             "energy": expedition_state["energy"],
             "max_energy": expedition_state["max_energy"],
             "can_expedition": expedition_state["can_expedition"],
+            "event": self._event_compact_view(event),
         }
 
     def get_player_hub_state(self, user_id: int) -> dict:
@@ -590,13 +762,22 @@ class GameService:
         self._save_user(user)
         return True, "Ускорение применено."
 
-    def _roll_drop(self, tree_id: str) -> dict:
+    def _roll_drop(self, tree_id: str, drop_bonus: float = 0.0) -> dict:
         drops = TREE_TYPES[tree_id]["drops"]
-        roll = random.uniform(0, 100)
+        adjusted_weights: list[float] = []
+        for drop in drops:
+            base_chance = max(self._safe_float(drop.get("chance"), 0.0), 0.0)
+            rarity_multiplier = 2.0 if base_chance <= XP_REWARDS["rare_drop_threshold"] else 1.0
+            adjusted_weights.append(base_chance * (1.0 + drop_bonus * rarity_multiplier))
+
+        total = sum(adjusted_weights)
+        if total <= 0:
+            return drops[-1]
+        roll = random.uniform(0, total)
         cumulative = 0.0
         fallback = drops[-1]
-        for drop in drops:
-            cumulative += drop["chance"]
+        for drop, weight in zip(drops, adjusted_weights):
+            cumulative += weight
             if roll <= cumulative:
                 return drop
             fallback = drop
@@ -614,6 +795,9 @@ class GameService:
 
     def harvest(self, user_id: int) -> dict:
         user = self.user(user_id)
+        event = self.update_event_if_needed()
+        drop_bonus = max(self._safe_float((event or {}).get("drop_bonus"), 0.0), 0.0)
+        extra_drop_cfg = (event or {}).get("extra_drop")
         harvested = 0
         coins = 0
         wilted_removed = 0
@@ -636,13 +820,26 @@ class GameService:
                     blocked += 1
                     new_farm.append(plant)
                     continue
-                drop = self._roll_drop(plant.tree_id)
+                drop = self._roll_drop(plant.tree_id, drop_bonus=drop_bonus)
                 user.harvest[drop["id"]] = user.harvest.get(drop["id"], 0) + 1
-                user.coins += drop["price"]
+                drop_price = int(max(self._safe_float(drop.get("price"), 0.0), 0.0))
+                coin_gain = max(int(drop_price * (1.0 + drop_bonus)), drop_price)
+                user.coins += coin_gain
                 harvested += 1
-                coins += drop["price"]
+                coins += coin_gain
                 drops.append(drop["title"])
                 gained_xp += self._xp_for_harvest(plant.tree_id, drop)
+
+                if (
+                    isinstance(extra_drop_cfg, dict)
+                    and self.inventory_free(user) > 0
+                    and random.random() <= max(self._safe_float(extra_drop_cfg.get("chance"), 0.0), 0.0)
+                ):
+                    extra_id = str(extra_drop_cfg.get("id", "")).strip()
+                    if extra_id:
+                        extra_title = str(extra_drop_cfg.get("title", extra_id)).strip()
+                        user.harvest[extra_id] = user.harvest.get(extra_id, 0) + 1
+                        drops.append(extra_title)
                 continue
 
             new_farm.append(plant)
@@ -657,6 +854,7 @@ class GameService:
             "blocked": blocked,
             "drops": drops,
             "xp": xp_result,
+            "event": self._event_compact_view(event),
         }
 
     def drop_one_item(self, user_id: int, item_id: str) -> tuple[bool, str]:
