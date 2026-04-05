@@ -15,13 +15,26 @@ class Storage:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._data: Dict[str, UserState] = {}
+        self._meta: dict[str, object] = {}
         self._load()
 
     def _load(self) -> None:
         if not self.path.exists():
             return
         raw = json.loads(self.path.read_text(encoding="utf-8"))
-        for user_id, payload in raw.items():
+        if isinstance(raw, dict) and "__users" in raw:
+            raw_users = raw.get("__users", {})
+            self._meta = dict(raw.get("__meta", {}))
+        else:
+            raw_users = raw
+            self._meta = {}
+
+        if not isinstance(raw_users, dict):
+            raw_users = {}
+
+        for user_id, payload in raw_users.items():
+            if not isinstance(payload, dict):
+                continue
             farm: list[PlantRecord] = []
             for item in payload.get("farm", []):
                 plant_id = item.get("plant_id")
@@ -75,9 +88,8 @@ class Storage:
                 "inventory_capacity": state.inventory_capacity,
                 "next_plant_id": state.next_plant_id,
             }
-        self.path.write_text(
-            json.dumps(serializable, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        payload = {"__users": serializable, "__meta": self._meta}
+        self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def get_or_create_user(self, user_id: int) -> UserState:
         key = str(user_id)
@@ -88,3 +100,9 @@ class Storage:
             )
             self.save()
         return self._data[key]
+
+    def get_meta(self, key: str, default: object | None = None) -> object | None:
+        return self._meta.get(key, default)
+
+    def set_meta(self, key: str, value: object) -> None:
+        self._meta[key] = value
